@@ -114,12 +114,36 @@ enum ProjectFileStorage {
         try FileManager.default.copyItem(at: source, to: destination)
         return destination
     }
+
+    static func keepImportedPhoto(_ data: Data) throws -> URL {
+        guard let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 1) else {
+            throw MediaImportError.invalidImage
+        }
+        try FileManager.default.createDirectory(at: projectsFolder, withIntermediateDirectories: true)
+        let destination = projectsFolder
+            .appendingPathComponent("\(UUID().uuidString)_Photo")
+            .appendingPathExtension("jpg")
+        try jpeg.write(to: destination, options: .atomic)
+        return destination
+    }
+}
+
+enum MediaImportError: LocalizedError {
+    case invalidImage
+    case unsupportedMedia
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidImage: return "The selected photo could not be decoded. Try downloading its original in Photos and import it again."
+        case .unsupportedMedia: return "The selected item did not provide a compatible photo or video file. Download it to this iPhone and try again."
+        }
+    }
 }
 
 private struct ImportedMovie: Transferable {
     let url: URL
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .movie, shouldAttemptToOpenInPlace: true) { received in
+        FileRepresentation(importedContentType: .movie, shouldAttemptToOpenInPlace: false) { received in
             let destination = try ProjectFileStorage.keepImportedFile(received.file, defaultExtension: "mov")
             return ImportedMovie(url: destination)
         }
@@ -130,9 +154,12 @@ private struct ImportedPhoto: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .image, shouldAttemptToOpenInPlace: true) { received in
+        FileRepresentation(importedContentType: .image, shouldAttemptToOpenInPlace: false) { received in
             let destination = try ProjectFileStorage.keepImportedFile(received.file, defaultExtension: "jpg")
             return ImportedPhoto(url: destination)
+        }
+        DataRepresentation(importedContentType: .image) { data in
+            ImportedPhoto(url: try ProjectFileStorage.keepImportedPhoto(data))
         }
     }
 }
@@ -738,10 +765,14 @@ struct EditorView: View {
         }
         do {
             if item.supportedContentTypes.contains(where: { $0.conforms(to: .image) }) {
-                guard let photo = try await item.loadTransferable(type: ImportedPhoto.self) else { return }
+                guard let photo = try await item.loadTransferable(type: ImportedPhoto.self) else {
+                    throw MediaImportError.unsupportedMedia
+                }
                 configurePhoto(for: photo.url)
             } else {
-                guard let movie = try await item.loadTransferable(type: ImportedMovie.self) else { return }
+                guard let movie = try await item.loadTransferable(type: ImportedMovie.self) else {
+                    throw MediaImportError.unsupportedMedia
+                }
                 movieURL = movie.url
                 loadRecentMovies()
             }

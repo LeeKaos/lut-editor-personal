@@ -38,7 +38,7 @@ private struct LibraryMovie: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .movie, shouldAttemptToOpenInPlace: true) { received in
+        FileRepresentation(importedContentType: .movie, shouldAttemptToOpenInPlace: false) { received in
             let destination = try ProjectFileStorage.keepImportedFile(received.file, defaultExtension: "mov")
             return LibraryMovie(url: destination)
         }
@@ -49,9 +49,12 @@ private struct LibraryPhoto: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .image, shouldAttemptToOpenInPlace: true) { received in
+        FileRepresentation(importedContentType: .image, shouldAttemptToOpenInPlace: false) { received in
             let destination = try ProjectFileStorage.keepImportedFile(received.file, defaultExtension: "jpg")
             return LibraryPhoto(url: destination)
+        }
+        DataRepresentation(importedContentType: .image) { data in
+            LibraryPhoto(url: try ProjectFileStorage.keepImportedPhoto(data))
         }
     }
 }
@@ -352,10 +355,14 @@ struct ProjectsHomeView: View {
         do {
             let destination: URL
             if item.supportedContentTypes.contains(where: { $0.conforms(to: .image) }) {
-                guard let photo = try await item.loadTransferable(type: LibraryPhoto.self) else { return }
+                guard let photo = try await item.loadTransferable(type: LibraryPhoto.self) else {
+                    throw MediaImportError.unsupportedMedia
+                }
                 destination = photo.url
             } else {
-                guard let movie = try await item.loadTransferable(type: LibraryMovie.self) else { return }
+                guard let movie = try await item.loadTransferable(type: LibraryMovie.self) else {
+                    throw MediaImportError.unsupportedMedia
+                }
                 destination = movie.url
             }
             reloadProjects()
