@@ -1,5 +1,6 @@
 import AVFoundation
 import ImageIO
+import Photos
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -10,6 +11,19 @@ private enum HomeSection: String, CaseIterable {
     case profile = "Profile"
 
     var symbol: String { self == .projects ? "square.grid.2x2.fill" : "person.crop.circle" }
+}
+
+enum PhotoLibraryPermissions {
+    static func requestFullAccess() async -> PHAuthorizationStatus {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .notDetermined else { return status }
+        return await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+    }
+
+    static func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
 }
 
 private struct LibraryProject: Identifiable, Hashable {
@@ -52,6 +66,8 @@ struct ProjectsHomeView: View {
     @State private var pendingDelete: LibraryProject?
     @State private var showDeleteConfirmation = false
     @State private var importError: String?
+    @State private var showingPhotoPicker = false
+    @State private var photoAccessAlert: String?
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
@@ -68,6 +84,8 @@ struct ProjectsHomeView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomNavigation }
         .onAppear(perform: reloadProjects)
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedMovie,
+                      matching: .any(of: [.images, .videos]))
         .onChange(of: selectedMovie) { _, item in
             guard let item else { return }
             isImporting = true
@@ -91,6 +109,16 @@ struct ProjectsHomeView: View {
         } message: {
             Text(importError ?? "Please try selecting the photo or video again.")
         }
+        .confirmationDialog("Photo Library Access", isPresented: Binding(
+            get: { photoAccessAlert != nil },
+            set: { if !$0 { photoAccessAlert = nil } }
+        ), titleVisibility: .visible) {
+            Button("Open Settings") { PhotoLibraryPermissions.openSettings(); photoAccessAlert = nil }
+            Button("Continue with selected items", role: .cancel) {
+                photoAccessAlert = nil
+                showingPhotoPicker = true
+            }
+        } message: { Text(photoAccessAlert ?? "") }
         .preferredColorScheme(.dark)
     }
 
@@ -244,7 +272,7 @@ struct ProjectsHomeView: View {
 
     private var bottomNavigation: some View {
         VStack(spacing: 8) {
-            PhotosPicker(selection: $selectedMovie, matching: .any(of: [.images, .videos])) {
+            Button { Task { await beginMediaSelection() } } label: {
                 HStack(spacing: 9) {
                     if isImporting { ProgressView().tint(.black) }
                     else { Image(systemName: "plus").font(.system(size: 14, weight: .bold)) }
@@ -337,6 +365,21 @@ struct ProjectsHomeView: View {
         } catch {
             reloadProjects()
             importError = error.localizedDescription
+        }
+    }
+
+    @MainActor private func beginMediaSelection() async {
+        switch await PhotoLibraryPermissions.requestFullAccess() {
+        case .authorized:
+            showingPhotoPicker = true
+        case .limited:
+            photoAccessAlert = "LUT Studio currently has access to selected items only. In Settings, open Photos and choose Full Access to browse your entire library."
+        case .denied, .restricted:
+            photoAccessAlert = "Allow Full Access in iPhone Settings → Apps → LUT Editor → Photos to browse your entire library."
+        case .notDetermined:
+            break
+        @unknown default:
+            showingPhotoPicker = true
         }
     }
 

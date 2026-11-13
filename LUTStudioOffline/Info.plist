@@ -22,6 +22,8 @@
 	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save your edited photos and videos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Access your photo library so you can browse and edit your photos and videos in LUT Studio.</string>
 	<key>UIFileSharingEnabled</key>
 	<false/>
 	<key>UILaunchScreen</key>

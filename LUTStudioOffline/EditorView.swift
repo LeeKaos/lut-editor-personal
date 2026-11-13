@@ -5,6 +5,7 @@ import ImageIO
 import Photos
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 private enum EditorTab: String, CaseIterable {
@@ -58,6 +59,10 @@ private enum FilmEffect: String, CaseIterable, Identifiable, Codable {
     case halation = "Halation"
     case softGlow = "Soft Glow"
     case lightLeak = "Light Leak"
+    case fade = "Film Fade"
+    case chrome = "Chrome"
+    case instant = "Instant Film"
+    case noir = "Noir"
     var id: String { rawValue }
 }
 
@@ -170,6 +175,8 @@ struct EditorView: View {
     @State private var presetName = ""
     @State private var exportMessage: String?
     @State private var showExportMessage = false
+    @State private var showingPhotoPicker = false
+    @State private var photoAccessAlert: String?
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     private static let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -222,7 +229,7 @@ struct EditorView: View {
                         Image(systemName: "photo.on.rectangle.angled").font(.system(size: 44)).foregroundStyle(.white.opacity(0.65))
                         Text("Choose a photo or video to start editing")
                             .font(.system(size: 15, weight: .medium)).foregroundStyle(.white.opacity(0.8))
-                        PhotosPicker(selection: $selectedMovie, matching: .any(of: [.images, .videos])) {
+                        Button { Task { await beginMediaSelection() } } label: {
                             Label("Choose Media", systemImage: "plus")
                                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(.black)
                                 .padding(.horizontal, 20).padding(.vertical, 11)
@@ -258,7 +265,7 @@ struct EditorView: View {
                     }
                     Spacer()
                     if hasMedia {
-                        PhotosPicker(selection: $selectedMovie, matching: .any(of: [.images, .videos])) {
+                        Button { Task { await beginMediaSelection() } } label: {
                             Group {
                                 if isImportingMedia { ProgressView().tint(.white) }
                                 else { Image(systemName: "plus.rectangle.on.rectangle") }
@@ -342,6 +349,8 @@ struct EditorView: View {
                 else if player == nil { configurePlayer(for: initialMediaURL) }
             }
         }
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedMovie,
+                      matching: .any(of: [.images, .videos]))
         .onChange(of: selectedMovie) { _, item in
             guard let item else { return }
             isImportingMedia = true
@@ -397,6 +406,16 @@ struct EditorView: View {
         .alert("LUT Editor", isPresented: $showExportMessage) {
             Button("OK", role: .cancel) { }
         } message: { Text(exportMessage ?? "") }
+        .confirmationDialog("Photo Library Access", isPresented: Binding(
+            get: { photoAccessAlert != nil },
+            set: { if !$0 { photoAccessAlert = nil } }
+        ), titleVisibility: .visible) {
+            Button("Open Settings") { PhotoLibraryPermissions.openSettings(); photoAccessAlert = nil }
+            Button("Continue with selected items", role: .cancel) {
+                photoAccessAlert = nil
+                showingPhotoPicker = true
+            }
+        } message: { Text(photoAccessAlert ?? "") }
         .sheet(isPresented: $showPresetSheet) {
             VStack(spacing: 18) {
                 Text("Save Preset").font(.headline)
@@ -496,22 +515,30 @@ struct EditorView: View {
 
     private var adjustmentsPanel: some View {
         VStack(spacing: 16) {
-            Button {
-                settings.smartEnhance = settings.smartEnhance != true
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "sparkles")
-                    Text("Smart Enhance · On device")
-                    Spacer()
-                    Text(settings.smartEnhance == true ? "ON" : "AUTO")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
+            HStack(spacing: 8) {
+                Button {
+                    settings.smartEnhance = settings.smartEnhance != true
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "sparkles")
+                        Text("Smart Enhance · On device")
+                        Spacer()
+                        Text(settings.smartEnhance == true ? "ON" : "AUTO")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(settings.smartEnhance == true ? .black : .white)
+                    .padding(.horizontal, 14).frame(height: 38)
+                    .background(settings.smartEnhance == true ? accent : .white.opacity(0.08), in: Capsule())
                 }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(settings.smartEnhance == true ? .black : .white)
-                .padding(.horizontal, 14).frame(height: 38)
-                .background(settings.smartEnhance == true ? accent : .white.opacity(0.08), in: Capsule())
+                .buttonStyle(.plain)
+
+                Button("Reset") { resetAdjustments() }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(.horizontal, 12).frame(height: 38)
+                    .background(.white.opacity(0.08), in: Capsule())
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, 20)
             Spacer(minLength: 18)
             HStack {
@@ -593,6 +620,10 @@ struct EditorView: View {
         case .halation: return "sun.max"
         case .softGlow: return "sun.haze.fill"
         case .lightLeak: return "sun.max.fill"
+        case .fade: return "circle.lefthalf.filled"
+        case .chrome: return "camera.filters"
+        case .instant: return "camera.macro"
+        case .noir: return "moon"
         }
     }
 
@@ -673,6 +704,22 @@ struct EditorView: View {
         showPresetSheet = false
     }
 
+    private func resetAdjustments() {
+        settings.hue = 0
+        settings.exposure = 0
+        settings.contrast = 0
+        settings.highlights = 0
+        settings.shadows = 0
+        settings.temperature = 0
+        settings.vibrance = 0
+        settings.saturation = 0
+        settings.sharpness = 0
+        settings.vignette = 0
+        settings.curves = 0
+        settings.curvePoints = [0, 0.25, 0.5, 0.75, 1]
+        settings.smartEnhance = nil
+    }
+
     private func deletePreset(_ preset: UserPreset) {
         savedPresets.removeAll { $0.id == preset.id }
         persistSavedPresets()
@@ -701,6 +748,21 @@ struct EditorView: View {
         } catch {
             exportMessage = "Could not open this media: \(error.localizedDescription)"
             showExportMessage = true
+        }
+    }
+
+    @MainActor private func beginMediaSelection() async {
+        switch await PhotoLibraryPermissions.requestFullAccess() {
+        case .authorized:
+            showingPhotoPicker = true
+        case .limited:
+            photoAccessAlert = "LUT Studio currently has access to selected items only. In Settings, open Photos and choose Full Access to browse your entire library."
+        case .denied, .restricted:
+            photoAccessAlert = "Allow Full Access in iPhone Settings → Apps → LUT Editor → Photos to browse your entire library."
+        case .notDetermined:
+            break
+        @unknown default:
+            showingPhotoPicker = true
         }
     }
 
@@ -1056,6 +1118,24 @@ struct EditorView: View {
                 mix.setValue(screen.outputImage ?? image, forKey: "inputTargetImage")
                 mix.setValue(amount, forKey: "inputTime")
                 image = mix.outputImage ?? image
+            }
+        case .fade, .chrome, .instant, .noir:
+            let filterName: String
+            switch settings.effect {
+            case .fade: filterName = "CIPhotoEffectFade"
+            case .chrome: filterName = "CIPhotoEffectChrome"
+            case .instant: filterName = "CIPhotoEffectInstant"
+            case .noir: filterName = "CIPhotoEffectNoir"
+            default: filterName = "CIPhotoEffectFade"
+            }
+            if let look = CIFilter(name: filterName) {
+                look.setValue(image, forKey: kCIInputImageKey)
+                if let mix = CIFilter(name: "CIDissolveTransition") {
+                    mix.setValue(image, forKey: "inputImage")
+                    mix.setValue(look.outputImage ?? image, forKey: "inputTargetImage")
+                    mix.setValue(amount, forKey: "inputTime")
+                    image = mix.outputImage ?? image
+                }
             }
         }
         return image.cropped(to: source.extent)
