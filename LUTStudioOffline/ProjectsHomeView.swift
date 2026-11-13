@@ -301,7 +301,7 @@ struct ProjectsHomeView: View {
             let left = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             let right = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             return newestFirst ? left > right : left < right
-        }
+        }.map { LibraryProject(url: $0) }
     }
 
     @MainActor private func importMovie(_ item: PhotosPickerItem) async {
