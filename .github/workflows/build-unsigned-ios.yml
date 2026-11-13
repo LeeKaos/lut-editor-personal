@@ -1,0 +1,45 @@
+name: Build iPhone app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Get app source
+        uses: actions/checkout@v4
+
+      - name: Reassemble source archive
+        run: cat AppSource.zip.part01 AppSource.zip.part02 AppSource.zip.part03 > AppSource.zip
+
+      - name: Unpack project and LUT library
+        run: unzip -q AppSource.zip -d source
+
+      - name: Build for iPhone
+        run: |
+          xcodebuild \
+            -project source/LUTStudioOffline.xcodeproj \
+            -scheme LUTStudioOffline \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath source/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p package/Payload
+          cp -R source/build/Build/Products/Release-iphoneos/LUTStudioOffline.app package/Payload/
+          cd package
+          /usr/bin/zip -qry ../LUTEditor-unsigned.ipa Payload
+
+      - name: Save IPA build
+        uses: actions/upload-artifact@v4
+        with:
+          name: LUTEditor-unsigned-ipa
+          path: LUTEditor-unsigned.ipa
+          if-no-files-found: error
