@@ -57,7 +57,7 @@ private enum FilmEffect: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
-private struct GradeSettings: Codable {
+private struct GradeSettings: Codable, Equatable {
     var lutURL: URL?
     var lutIntensity: Float = 1
     var hue: Float = 0
@@ -98,7 +98,12 @@ private struct ImportedMovie: Transferable {
 }
 
 struct EditorView: View {
+    private let initialMovieURL: URL?
+    private let onClose: (() -> Void)?
     @State private var selectedMovie: PhotosPickerItem?
+    @State private var isImportingMovie = false
+    @State private var isShowingOriginal = false
+    @State private var compositionUpdateTask: Task<Void, Never>?
     @State private var player: AVPlayer?
     @State private var filteredComposition: AVVideoComposition?
     @State private var movieURL: URL?
@@ -127,6 +132,13 @@ struct EditorView: View {
     @State private var showExportMessage = false
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
+
+    init(initialMovieURL: URL? = nil, onClose: (() -> Void)? = nil) {
+        self.initialMovieURL = initialMovieURL
+        self.onClose = onClose
+        _movieURL = State(initialValue: initialMovieURL)
+    }
+
     private var categories: [String] {
         (savedPresets.isEmpty ? [] : ["My Presets"]) + ["Cinematic", "Social", "Clean", "Daily", "Essentials", "Dark", "Movies", "LUTs"]
     }
@@ -149,10 +161,6 @@ struct EditorView: View {
                             }
                             .onEnded { _ in lastVideoOffset = videoOffset })
                         .onAppear { player.play() }
-                        .onLongPressGesture(minimumDuration: 0.18, pressing: { pressing in
-                            guard let item = player.currentItem else { return }
-                            item.videoComposition = pressing ? nil : filteredComposition
-                        }, perform: { })
                 } else {
                     VStack(spacing: 14) {
                         Image(systemName: "film").font(.system(size: 44)).foregroundStyle(.white.opacity(0.65))
@@ -181,11 +189,37 @@ struct EditorView: View {
                     }
                 }
                 HStack {
-                    Button { clearMovie() } label: {
-                        Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold))
-                            .frame(width: 38, height: 38).background(.black.opacity(0.65), in: Circle())
+                    if movieURL != nil {
+                        Button {
+                            if let onClose { onClose() } else { clearMovie() }
+                        } label: {
+                            Image(systemName: onClose == nil ? "chevron.left" : "xmark")
+                                .font(.system(size: 15, weight: .semibold))
+                                .frame(width: 38, height: 38).background(.black.opacity(0.65), in: Circle())
+                        }
+                    } else {
+                        Color.clear.frame(width: 38, height: 38)
                     }
                     Spacer()
+                    if movieURL != nil {
+                        PhotosPicker(selection: $selectedMovie, matching: .videos) {
+                            Group {
+                                if isImportingMovie { ProgressView().tint(.white) }
+                                else { Image(systemName: "plus.rectangle.on.rectangle") }
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 38, height: 38).background(.black.opacity(0.65), in: Circle())
+                        }
+                        .disabled(isImportingMovie)
+                        .accessibilityLabel("Add or replace video")
+                        Button { toggleOriginalPreview() } label: {
+                            Label(isShowingOriginal ? "Original" : "Compare", systemImage: "circle.lefthalf.filled")
+                                .font(.system(size: 11, weight: .semibold))
+                                .padding(.horizontal, 11).padding(.vertical, 9)
+                                .background(isShowingOriginal ? accent : .black.opacity(0.65), in: Capsule())
+                                .foregroundStyle(isShowingOriginal ? .black : .white)
+                        }
+                    }
                     Button { showExportQuality = true } label: {
                         if exporting { ProgressView().tint(.white) }
                         else { Text("Export").font(.system(size: 13, weight: .semibold)) }
@@ -243,34 +277,21 @@ struct EditorView: View {
             .padding(.top, 14)
         }
         .background(Color(red: 0.07, green: 0.07, blue: 0.08).ignoresSafeArea())
-        .onAppear(perform: loadPresets)
-        .onAppear(perform: loadSavedPresets)
-        .onAppear(perform: loadRecentMovies)
+        .onAppear {
+            loadPresets()
+            loadSavedPresets()
+            loadRecentMovies()
+            if let initialMovieURL, player == nil { configurePlayer(for: initialMovieURL) }
+        }
         .onChange(of: selectedMovie) { _, item in
             guard let item else { return }
+            isImportingMovie = true
             Task { await importMovie(item) }
         }
         .onChange(of: movieURL) { _, url in
             if let url { configurePlayer(for: url) }
         }
-        .onChange(of: settings.lutURL) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.lutIntensity) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.hue) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.exposure) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.contrast) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.highlights) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.shadows) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.temperature) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.vibrance) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.saturation) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.sharpness) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.vignette) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.curves) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.curvePoints) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.effect) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.effectIntensity) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.roughness) { _, _ in updateVideoComposition() }
-        .onChange(of: settings.size) { _, _ in updateVideoComposition() }
+        .onChange(of: settings) { _, _ in scheduleCompositionUpdate() }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { _ in
             player?.seek(to: .zero)
             player?.play()
@@ -338,6 +359,7 @@ struct EditorView: View {
         .onDisappear {
             player?.pause()
             removeTimeObserver()
+            compositionUpdateTask?.cancel()
         }
     }
 
@@ -565,15 +587,23 @@ struct EditorView: View {
     }
 
     @MainActor private func importMovie(_ item: PhotosPickerItem) async {
+        defer {
+            selectedMovie = nil
+            isImportingMovie = false
+        }
         do {
             guard let movie = try await item.loadTransferable(type: ImportedMovie.self) else { return }
             let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Projects", isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let name = "\(Int(Date().timeIntervalSince1970))_\(movie.url.lastPathComponent)"
+            let name = "\(Int(Date().timeIntervalSince1970))_\(UUID().uuidString.prefix(8))_\(movie.url.lastPathComponent)"
             let savedURL = folder.appendingPathComponent(name)
-            try FileManager.default.copyItem(at: movie.url, to: savedURL)
-            try? FileManager.default.removeItem(at: movie.url)
+            do {
+                try FileManager.default.moveItem(at: movie.url, to: savedURL)
+            } catch {
+                try FileManager.default.copyItem(at: movie.url, to: savedURL)
+                try? FileManager.default.removeItem(at: movie.url)
+            }
             movieURL = savedURL
             loadRecentMovies()
         } catch {
@@ -586,7 +616,17 @@ struct EditorView: View {
         player?.pause()
         removeTimeObserver()
         player = nil
+        filteredComposition = nil
         movieURL = nil
+        selectedMovie = nil
+        currentTime = 0
+        duration = 0
+        isPlaying = false
+        videoScale = 1
+        lastVideoScale = 1
+        videoOffset = .zero
+        lastVideoOffset = .zero
+        isShowingOriginal = false
     }
 
     private func openProject(_ url: URL) {
@@ -614,10 +654,12 @@ struct EditorView: View {
     }
 
     private func configurePlayer(for url: URL) {
+        player?.pause()
         removeTimeObserver()
         loadSettings(for: url)
         let item = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: item)
+        isShowingOriginal = false
         currentTime = 0
         duration = 0
         isPlaying = false
@@ -654,6 +696,11 @@ struct EditorView: View {
         }
     }
 
+    private func toggleOriginalPreview() {
+        isShowingOriginal.toggle()
+        player?.currentItem?.videoComposition = isShowingOriginal ? nil : filteredComposition
+    }
+
     private func timeString(_ time: Double) -> String {
         guard time.isFinite else { return "00:00" }
         let seconds = max(0, Int(time))
@@ -664,14 +711,23 @@ struct EditorView: View {
         guard let movieURL, let item = player?.currentItem else { return }
         let asset = AVURLAsset(url: movieURL)
         let snapshot = settings
-        let cube = snapshot.lutURL.flatMap { CubeLUT(url: $0) }
+        let cube = snapshot.lutURL.flatMap { CubeLUT.cached(url: $0) }
         let composition = AVVideoComposition(asset: asset) { request in
             let image = Self.grade(request.sourceImage, settings: snapshot, cube: cube)
             request.finish(with: image, context: nil)
         }
         filteredComposition = composition
-        item.videoComposition = composition
+        item.videoComposition = isShowingOriginal ? nil : composition
         saveSettings(for: movieURL)
+    }
+
+    private func scheduleCompositionUpdate() {
+        compositionUpdateTask?.cancel()
+        compositionUpdateTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            guard !Task.isCancelled else { return }
+            updateVideoComposition()
+        }
     }
 
     private func settingsFile(for url: URL) -> URL {
@@ -819,7 +875,7 @@ struct EditorView: View {
                     throw ExportError.cannotCreateSession
                 }
                 let snapshot = settings
-                let cube = snapshot.lutURL.flatMap { CubeLUT(url: $0) }
+                let cube = snapshot.lutURL.flatMap { CubeLUT.cached(url: $0) }
                 session.videoComposition = AVVideoComposition(asset: asset) { request in
                     request.finish(with: Self.grade(request.sourceImage, settings: snapshot, cube: cube), context: nil)
                 }
@@ -871,6 +927,20 @@ struct EditorView: View {
 private struct CubeLUT {
     let dimension: Int
     let data: Data
+    private static let cache: NSCache<NSURL, CubeLUTCacheEntry> = {
+        let cache = NSCache<NSURL, CubeLUTCacheEntry>()
+        cache.countLimit = 10
+        cache.totalCostLimit = 64 * 1024 * 1024
+        return cache
+    }()
+
+    static func cached(url: URL) -> CubeLUT? {
+        let key = url as NSURL
+        if let entry = cache.object(forKey: key) { return entry.value }
+        guard let value = CubeLUT(url: url) else { return nil }
+        cache.setObject(CubeLUTCacheEntry(value), forKey: key, cost: value.data.count)
+        return value
+    }
 
     init?(url: URL) {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
@@ -891,6 +961,11 @@ private struct CubeLUT {
             Data(bytes: buffer.baseAddress!, count: buffer.count * MemoryLayout<Float>.size)
         }
     }
+}
+
+private final class CubeLUTCacheEntry {
+    let value: CubeLUT
+    init(_ value: CubeLUT) { self.value = value }
 }
 
 private struct CurveGraph: View {

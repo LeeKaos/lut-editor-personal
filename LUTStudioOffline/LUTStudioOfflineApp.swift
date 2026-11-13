@@ -4,7 +4,7 @@ import SwiftUI
 struct LUTStudioOfflineApp: App {
     var body: some Scene {
         WindowGroup {
-            EditorView()
+            ProjectsHomeView()
                 .preferredColorScheme(.dark)
         }
     }
