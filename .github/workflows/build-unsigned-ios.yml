@@ -19,6 +19,9 @@ jobs:
       - name: Unpack project and LUT library
         run: unzip -q AppSource.zip -d source
 
+      - name: Apply Swift compile fix
+        run: cp EditorView.swift source/LUTStudioOffline/EditorView.swift
+
       - name: Build for iPhone
         run: |
           xcodebuild \
