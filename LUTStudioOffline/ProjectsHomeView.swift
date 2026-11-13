@@ -1,4 +1,5 @@
 import AVFoundation
+import ImageIO
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -14,19 +15,29 @@ private enum HomeSection: String, CaseIterable {
 private struct LibraryProject: Identifiable, Hashable {
     let url: URL
     var id: String { url.path }
+    var isPhoto: Bool { Self.imageExtensions.contains(url.pathExtension.lowercased()) }
+
+    private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "webp"]
 }
 
 private struct LibraryMovie: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .movie) { received in
-            let ext = received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension
-            let temporary = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(ext)
-            try FileManager.default.copyItem(at: received.file, to: temporary)
-            return LibraryMovie(url: temporary)
+        FileRepresentation(importedContentType: .movie, shouldAttemptToOpenInPlace: true) { received in
+            let destination = try ProjectFileStorage.keepImportedFile(received.file, defaultExtension: "mov")
+            return LibraryMovie(url: destination)
+        }
+    }
+}
+
+private struct LibraryPhoto: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .image, shouldAttemptToOpenInPlace: true) { received in
+            let destination = try ProjectFileStorage.keepImportedFile(received.file, defaultExtension: "jpg")
+            return LibraryPhoto(url: destination)
         }
     }
 }
@@ -57,13 +68,13 @@ struct ProjectsHomeView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomNavigation }
         .onAppear(perform: reloadProjects)
-        .onChange(of: selectedMovie) { _, movie in
-            guard let movie else { return }
+        .onChange(of: selectedMovie) { _, item in
+            guard let item else { return }
             isImporting = true
-            Task { await importMovie(movie) }
+            Task { await importAsset(item) }
         }
         .fullScreenCover(item: $selectedProject) { project in
-            EditorView(initialMovieURL: project.url, onClose: { selectedProject = nil })
+            EditorView(initialMediaURL: project.url, onClose: { selectedProject = nil })
                 .preferredColorScheme(.dark)
         }
         .confirmationDialog("Delete this video project?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
@@ -72,13 +83,13 @@ struct ProjectsHomeView: View {
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         }
-        .alert("Couldn't add video", isPresented: Binding(
+        .alert("Couldn't add media", isPresented: Binding(
             get: { importError != nil },
             set: { if !$0 { importError = nil } }
         )) {
             Button("OK", role: .cancel) { importError = nil }
         } message: {
-            Text(importError ?? "Please try selecting the video again.")
+            Text(importError ?? "Please try selecting the photo or video again.")
         }
         .preferredColorScheme(.dark)
     }
@@ -142,7 +153,7 @@ struct ProjectsHomeView: View {
             }
             Text("Your edits, all in one place")
                 .font(.system(size: 20, weight: .semibold, design: .rounded)).foregroundStyle(.white)
-            Text("Choose a video to start a project. Your videos and edits stay on this iPhone.")
+            Text("Choose a photo or video to start a project. Your media and edits stay on this iPhone.")
                 .font(.system(size: 13)).foregroundStyle(.white.opacity(0.58))
                 .multilineTextAlignment(.center).frame(maxWidth: 280)
             Spacer()
@@ -158,7 +169,7 @@ struct ProjectsHomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 LinearGradient(colors: [.clear, .black.opacity(0.62)], startPoint: .center, endPoint: .bottom)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Image(systemName: "play.fill")
+                Image(systemName: project.isPhoto ? "photo" : "play.fill")
                     .font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
                     .padding(7).background(.black.opacity(0.55), in: Circle()).padding(8)
             }
@@ -201,7 +212,7 @@ struct ProjectsHomeView: View {
                 .padding(.horizontal, 18)
 
                 VStack(spacing: 0) {
-                    profileRow(symbol: "square.grid.2x2", title: "Video projects", value: "\(projects.count)")
+                    profileRow(symbol: "square.grid.2x2", title: "Media projects", value: "\(projects.count)")
                     Divider().overlay(.white.opacity(0.08)).padding(.leading, 50)
                     profileRow(symbol: "cube.transparent", title: "Bundled LUTs", value: "\(bundledLUTCount)")
                     Divider().overlay(.white.opacity(0.08)).padding(.leading, 50)
@@ -233,11 +244,11 @@ struct ProjectsHomeView: View {
 
     private var bottomNavigation: some View {
         VStack(spacing: 8) {
-            PhotosPicker(selection: $selectedMovie, matching: .videos) {
+            PhotosPicker(selection: $selectedMovie, matching: .any(of: [.images, .videos])) {
                 HStack(spacing: 9) {
                     if isImporting { ProgressView().tint(.black) }
                     else { Image(systemName: "plus").font(.system(size: 14, weight: .bold)) }
-                    Text(isImporting ? "Adding video…" : "New Project")
+                Text(isImporting ? "Adding media…" : "New Project")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
                 }
                 .foregroundStyle(.black).frame(maxWidth: .infinity).frame(height: 48)
@@ -296,31 +307,28 @@ struct ProjectsHomeView: View {
             projects = []
             return
         }
-        let movies = urls.filter { ["mov", "mp4", "m4v"].contains($0.pathExtension.lowercased()) }
-        projects = movies.sorted { lhs, rhs in
+        let supportedExtensions: Set<String> = ["mov", "mp4", "m4v", "jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "webp"]
+        let media = urls.filter { supportedExtensions.contains($0.pathExtension.lowercased()) }
+        projects = media.sorted { lhs, rhs in
             let left = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             let right = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             return newestFirst ? left > right : left < right
         }.map { LibraryProject(url: $0) }
     }
 
-    @MainActor private func importMovie(_ item: PhotosPickerItem) async {
+    @MainActor private func importAsset(_ item: PhotosPickerItem) async {
         defer {
             selectedMovie = nil
             isImporting = false
         }
         do {
-            guard let movie = try await item.loadTransferable(type: LibraryMovie.self) else { return }
-            let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("Projects", isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let fileName = "\(Int(Date().timeIntervalSince1970))_\(UUID().uuidString.prefix(8))_\(movie.url.lastPathComponent)"
-            let destination = folder.appendingPathComponent(fileName)
-            do {
-                try FileManager.default.moveItem(at: movie.url, to: destination)
-            } catch {
-                try FileManager.default.copyItem(at: movie.url, to: destination)
-                try? FileManager.default.removeItem(at: movie.url)
+            let destination: URL
+            if item.supportedContentTypes.contains(where: { $0.conforms(to: .image) }) {
+                guard let photo = try await item.loadTransferable(type: LibraryPhoto.self) else { return }
+                destination = photo.url
+            } else {
+                guard let movie = try await item.loadTransferable(type: LibraryMovie.self) else { return }
+                destination = movie.url
             }
             reloadProjects()
             if let project = projects.first(where: { $0.url == destination }) {
@@ -363,6 +371,20 @@ private struct ProjectThumbnail: View {
         }
         .clipped()
         .task(id: url) {
+            if LibraryProject(url: url).isPhoto {
+                let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+                let thumbnailOptions: CFDictionary = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 520,
+                    kCGImageSourceShouldCacheImmediately: true
+                ] as CFDictionary
+                if let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions),
+                   let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) {
+                    image = UIImage(cgImage: thumbnail)
+                }
+                return
+            }
             let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: 420, height: 560)

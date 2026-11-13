@@ -21,7 +21,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save your edited videos to your photo library.</string>
+	<string>Save your edited photos and videos to your photo library.</string>
 	<key>UIFileSharingEnabled</key>
 	<false/>
 	<key>UILaunchScreen</key>
