@@ -96,6 +96,10 @@ enum ProjectFileStorage {
     }
 
     static func keepImportedFile(_ source: URL, defaultExtension: String) throws -> URL {
+        let hasScopedAccess = source.startAccessingSecurityScopedResource()
+        defer {
+            if hasScopedAccess { source.stopAccessingSecurityScopedResource() }
+        }
         try FileManager.default.createDirectory(at: projectsFolder, withIntermediateDirectories: true)
         let fileExtension = source.pathExtension.isEmpty ? defaultExtension : source.pathExtension
         let baseName = source.deletingPathExtension().lastPathComponent
