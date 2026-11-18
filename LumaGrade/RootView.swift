@@ -596,13 +596,40 @@ struct CubeLUT { let dimension: Int; let values: [Float]
         guard let root = Bundle.main.resourceURL?.appendingPathComponent("LUTs", isDirectory: true),
               let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
         return files.compactMap { item -> (String, String, URL)? in
-            guard let url = item as? URL, url.pathExtension.lowercased() == "cube" else { return nil }
+            guard let url = item as? URL, url.pathExtension.lowercased() == "lutf" else { return nil }
             let parent = url.deletingLastPathComponent().lastPathComponent
             let category = parent == "LUTs" ? "Kamera" : parent
             return (category, url.deletingPathExtension().lastPathComponent, url)
         }.sorted { $0.1.localizedCaseInsensitiveCompare($1.1) == .orderedAscending }
     }
-    static func load(url: URL) -> CubeLUT? { let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }; guard let text = try? String(contentsOf: url) else { return nil }; var size: Int?; var values: [Float] = []; for raw in text.components(separatedBy: .newlines) { let line = raw.trimmingCharacters(in: .whitespaces); if line.hasPrefix("LUT_3D_SIZE") { size = Int(line.split(separator: " ").last ?? "") }; let numbers = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap { Float($0) }; if numbers.count == 3 { values.append(contentsOf: numbers) } }; guard let dimension = size, values.count == dimension * dimension * dimension * 3 else { return nil }; return CubeLUT(dimension: dimension, values: values) }
+    static func load(url: URL) -> CubeLUT? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        if url.pathExtension.lowercased() == "lutf" {
+            guard let data = try? Data(contentsOf: url), data.count >= 8,
+                  data.prefix(4) == Data([0x4c, 0x55, 0x54, 0x46]) else { return nil }
+            let dimension = Int(data[4]) | Int(data[5]) << 8 | Int(data[6]) << 16 | Int(data[7]) << 24
+            let valueCount = dimension * dimension * dimension * 3
+            guard dimension > 1, data.count == 8 + valueCount * 2 else { return nil }
+            var values = [Float](); values.reserveCapacity(valueCount)
+            for index in 0..<valueCount {
+                let offset = 8 + index * 2
+                let bits = UInt16(data[offset]) | UInt16(data[offset + 1]) << 8
+                values.append(Float(Float16(bitPattern: bits)))
+            }
+            return CubeLUT(dimension: dimension, values: values)
+        }
+        guard let text = try? String(contentsOf: url) else { return nil }
+        var size: Int?; var values: [Float] = []
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("LUT_3D_SIZE") { size = Int(line.split(separator: " ").last ?? "") }
+            let numbers = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap { Float($0) }
+            if numbers.count == 3 { values.append(contentsOf: numbers) }
+        }
+        guard let dimension = size, values.count == dimension * dimension * dimension * 3 else { return nil }
+        return CubeLUT(dimension: dimension, values: values)
+    }
 }
 
 enum ImageRenderer { static let context = CIContext()
