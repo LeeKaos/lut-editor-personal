@@ -4,6 +4,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
 import Photos
+import UIKit
 
 private let accent = Color(red: 0.66, green: 1.0, blue: 0.16)
 
@@ -34,7 +35,7 @@ final class ProjectLibrary: ObservableObject {
 
 struct RootView: View {
     @State private var selectedTab = 0
-    var body: some View { TabView(selection: $selectedTab) { ProjectsView().tabItem { Label("Projeler", systemImage: "square.grid.2x2.fill") }.tag(0); SettingsView().tabItem { Label("Profil", systemImage: "person.crop.circle") }.tag(1) }.tint(accent).preferredColorScheme(.dark) }
+    var body: some View { TabView(selection: $selectedTab) { ProjectsView().tabItem { Label("Projeler", systemImage: "square.grid.2x2.fill") }.tag(0); SettingsView().tabItem { Label("Profil", systemImage: "person.crop.circle") }.tag(1) }.tint(accent).preferredColorScheme(.dark).task { if PHPhotoLibrary.authorizationStatus(for: .readWrite) == .notDetermined { PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in } } } }
 }
 
 struct ProjectsView: View {
@@ -73,6 +74,10 @@ struct SettingsView: View {
                 }
                 Section("Gizlilik") {
                     Text("Fotoğraf ve videolarınız bu aygıtta kalır.")
+                    Button("Fotoğraflar için tam erişim ayarları") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    }
                 }
             }
             .navigationTitle("Profil")
