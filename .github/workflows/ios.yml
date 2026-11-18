@@ -1,0 +1,13 @@
+name: iOS build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned simulator app
+        run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
