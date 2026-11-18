@@ -60,7 +60,7 @@ struct EditorView: View {
 }
 
 struct SliderPanel: View { @Binding var settings: GradeSettings; let labels: [(String, WritableKeyPath<GradeSettings, Double>, ClosedRange<Double>)]
-    var body: some View { ScrollView(.horizontal, showsIndicators: false) { HStack(alignment: .top, spacing: 18) { ForEach(labels, id: \.0) { item in VStack(alignment: .leading) { Text(item.0).font(.caption); Slider(value: Binding(get: { settings[keyPath: item.1] }, set: { settings[keyPath: item.1] = $0 }), in: item.2).frame(width: 160); Text(settings[keyPath: item.1], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) } } }.padding(.vertical, 4) } }
+    var body: some View { ScrollView(.horizontal, showsIndicators: false) { HStack(alignment: .top, spacing: 18) { ForEach(labels.indices, id: \.self) { index in let item = labels[index]; VStack(alignment: .leading) { Text(item.0).font(.caption); Slider(value: Binding(get: { settings[keyPath: item.1] }, set: { settings[keyPath: item.1] = $0 }), in: item.2).frame(width: 160); Text(settings[keyPath: item.1], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) } } }.padding(.vertical, 4) } }
 }
 
 struct SettingsView: View { var body: some View { NavigationStack { Form { Section("LumaGrade") { LabeledContent("Version", value: "1.0"); Text("A private, AltStore-ready color grading workspace.") } Section("Privacy") { Text("Media stays on this device. No account, tracking SDK, remote configuration, push notifications, or application groups are used.") } }.navigationTitle("Profile") } } }
