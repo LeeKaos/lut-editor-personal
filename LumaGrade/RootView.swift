@@ -322,18 +322,29 @@ struct EditorView: View {
         }
     }
     private func exportPreset(codec: String, resolution: String, supported: [String]) -> String {
-        let sizePreset: String
-        switch resolution {
-        case "540p": sizePreset = "AVAssetExportPreset960x540"
-        case "720p": sizePreset = "AVAssetExportPreset1280x720"
-        case "1080p": sizePreset = "AVAssetExportPreset1920x1080"
-        case "1440p": sizePreset = "AVAssetExportPreset2560x1440"
-        default: sizePreset = "AVAssetExportPresetHighestQuality"
+        if codec == "ProRes" {
+            let proRes = "AVAssetExportPresetAppleProRes422LPCM"
+            if supported.contains(proRes) { return proRes }
+        } else if codec == "HEVC" {
+            let hevcSizePreset: String?
+            switch resolution {
+            case "1080p": hevcSizePreset = "AVAssetExportPresetHEVC1920x1080"
+            case "1440p": hevcSizePreset = "AVAssetExportPresetHEVC3840x2160"
+            default: hevcSizePreset = nil
+            }
+            if let hevcSizePreset, supported.contains(hevcSizePreset) { return hevcSizePreset }
+            if supported.contains(AVAssetExportPresetHEVCHighestQuality) { return AVAssetExportPresetHEVCHighestQuality }
+        } else {
+            let h264SizePreset: String?
+            switch resolution {
+            case "540p": h264SizePreset = "AVAssetExportPreset960x540"
+            case "720p": h264SizePreset = "AVAssetExportPreset1280x720"
+            case "1080p": h264SizePreset = "AVAssetExportPreset1920x1080"
+            default: h264SizePreset = nil
+            }
+            if let h264SizePreset, supported.contains(h264SizePreset) { return h264SizePreset }
+            if supported.contains(AVAssetExportPresetHighestQuality) { return AVAssetExportPresetHighestQuality }
         }
-        let codecPreset = codec == "ProRes" ? "AVAssetExportPresetAppleProRes422LPCM" : (codec == "HEVC" ? AVAssetExportPresetHEVCHighestQuality : AVAssetExportPresetHighestQuality)
-        if codec == "ProRes", supported.contains(codecPreset) { return codecPreset }
-        if resolution != "Orijinal", supported.contains(sizePreset) { return sizePreset }
-        if supported.contains(codecPreset) { return codecPreset }
         return supported.first ?? AVAssetExportPresetHighestQuality
     }
 }
