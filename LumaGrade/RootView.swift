@@ -20,9 +20,12 @@ struct GradeProject: Identifiable, Codable, Equatable {
 
 struct GradeSettings: Codable, Equatable {
     var lutName = "Original"; var intensity = 100.0; var exposure = 0.0; var contrast = 1.0; var saturation = 1.0; var brightness = 0.0
-    var temperature = 6500.0; var tint = 0.0; var highlights = 1.0; var shadows = 0.0; var vignette = 0.0; var bloom = 0.0; var grain = 0.0
+    var temperature = 6500.0; var tint = 0.0; var highlights = 1.0; var shadows = 0.0; var whites = 0.0; var blacks = 0.0
+    var hue = 0.0; var vibrance = 0.0; var sharpness = 0.0; var curveBlack = 0.0; var curveMid = 0.5; var curveWhite = 1.0
+    var wheelShadows = 0.0; var wheelMidtones = 0.0; var wheelHighlights = 0.0
+    var vignette = 0.0; var bloom = 0.0; var grain = 0.0
     var source = "Regular"
-    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, vignette, bloom, grain, source }
+    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, vignette, bloom, grain, source }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -36,6 +39,17 @@ struct GradeSettings: Codable, Equatable {
         tint = try c.decodeIfPresent(Double.self, forKey: .tint) ?? 0
         highlights = try c.decodeIfPresent(Double.self, forKey: .highlights) ?? 1
         shadows = try c.decodeIfPresent(Double.self, forKey: .shadows) ?? 0
+        whites = try c.decodeIfPresent(Double.self, forKey: .whites) ?? 0
+        blacks = try c.decodeIfPresent(Double.self, forKey: .blacks) ?? 0
+        hue = try c.decodeIfPresent(Double.self, forKey: .hue) ?? 0
+        vibrance = try c.decodeIfPresent(Double.self, forKey: .vibrance) ?? 0
+        sharpness = try c.decodeIfPresent(Double.self, forKey: .sharpness) ?? 0
+        curveBlack = try c.decodeIfPresent(Double.self, forKey: .curveBlack) ?? 0
+        curveMid = try c.decodeIfPresent(Double.self, forKey: .curveMid) ?? 0.5
+        curveWhite = try c.decodeIfPresent(Double.self, forKey: .curveWhite) ?? 1
+        wheelShadows = try c.decodeIfPresent(Double.self, forKey: .wheelShadows) ?? 0
+        wheelMidtones = try c.decodeIfPresent(Double.self, forKey: .wheelMidtones) ?? 0
+        wheelHighlights = try c.decodeIfPresent(Double.self, forKey: .wheelHighlights) ?? 0
         vignette = try c.decodeIfPresent(Double.self, forKey: .vignette) ?? 0
         bloom = try c.decodeIfPresent(Double.self, forKey: .bloom) ?? 0
         grain = try c.decodeIfPresent(Double.self, forKey: .grain) ?? 0
@@ -125,7 +139,7 @@ struct EditorView: View {
         case 0:
             FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: library.image(for: project), settings: project.settings)
         case 1:
-            SliderPanel(settings: $project.settings, labels: [("Pozlama", \GradeSettings.exposure, -2...2), ("Kontrast", \GradeSettings.contrast, 0...2), ("Doygunluk", \GradeSettings.saturation, 0...2), ("Parlaklık", \GradeSettings.brightness, -0.25...0.25), ("Açık Alanlar", \GradeSettings.highlights, 0...2), ("Gölgeler", \GradeSettings.shadows, -1...1)])
+            AdjustmentPanel(settings: $project.settings)
         default:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
         }
@@ -149,6 +163,51 @@ struct SliderPanel: View { @Binding var settings: GradeSettings; let labels: [(S
                     }
                 }.padding(.vertical, 4)
             }
+        }
+    }
+}
+
+struct AdjustmentPanel: View {
+    @Binding var settings: GradeSettings
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack { Text("Kaynak profili"); Spacer(); Picker("Kaynak profili", selection: $settings.source) { ForEach(SourceDetector.profiles, id: \.self) { Text($0).tag($0) } }.labelsHidden() }
+                Group {
+                    adjust("Pozlama", \.exposure, -4...4)
+                    adjust("Gölgeler", \.shadows, -1...1)
+                    adjust("Açık alanlar", \.highlights, 0...2)
+                    adjust("Beyazlar", \.whites, -1...1)
+                    adjust("Siyahlar", \.blacks, -1...1)
+                    adjust("Sıcaklık", \.temperature, 2000...12000)
+                    adjust("Tint", \.tint, -100...100)
+                    adjust("Kontrast", \.contrast, 0...2)
+                    adjust("Hue", \.hue, -Double.pi...Double.pi)
+                    adjust("HLS · Açıklık", \.brightness, -0.5...0.5)
+                    adjust("Canlılık", \.vibrance, -1...1)
+                    adjust("Doygunluk", \.saturation, 0...2)
+                    adjust("Keskinlik", \.sharpness, 0...2)
+                    adjust("Vinyet", \.vignette, 0...2)
+                }
+                DisclosureGroup("Renk tekerleri") {
+                    adjust("Gölgeler", \.wheelShadows, -1...1)
+                    adjust("Orta tonlar", \.wheelMidtones, -1...1)
+                    adjust("Açık alanlar", \.wheelHighlights, -1...1)
+                }
+                DisclosureGroup("Eğriler") {
+                    adjust("Siyah noktası", \.curveBlack, 0...0.25)
+                    adjust("Orta nokta", \.curveMid, 0.1...0.9)
+                    adjust("Beyaz noktası", \.curveWhite, 0.75...1)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .frame(maxHeight: 245)
+    }
+    private func adjust(_ title: String, _ key: WritableKeyPath<GradeSettings, Double>, _ range: ClosedRange<Double>) -> some View {
+        VStack(spacing: 2) {
+            HStack { Text(title).font(.caption); Spacer(); Text(settings[keyPath: key], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) }
+            Slider(value: $settings[keyPath: key], in: range).tint(accent)
         }
     }
 }
@@ -269,4 +328,96 @@ enum ImageRenderer { static let context = CIContext()
         for index in stride(from: 0, to: rgb.count, by: 3) { rgba.append(rgb[index]); rgba.append(rgb[index + 1]); rgba.append(rgb[index + 2]); rgba.append(1) }
         return rgba.withUnsafeBufferPointer { Data(bytes: $0.baseAddress!, count: $0.count * MemoryLayout<Float>.size) }
     }
-    static func grade(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?) -> UIImage { guard var image = CIImage(image: source) else { return source }; let controls = CIFilter.colorControls(); controls.inputImage = image; controls.saturation = Float(settings.saturation); controls.brightness = Float(settings.brightness); controls.contrast = Float(settings.contrast); image = controls.outputImage ?? image; let exposure = CIFilter.exposureAdjust(); exposure.inputImage = image; exposure.ev = Float(settings.exposure); image = exposure.outputImage ?? image; if let lut { let cube = CIFilter.colorCube(); cube.inputImage = image; cube.cubeDimension = Float(lut.dimension); cube.cubeData = rgbaData(from: lut.values); let graded = cube.outputImage ?? image; if settings.intensity < 100 { let blend = CIFilter.blendWithMask(); blend.inputImage = graded; blend.backgroundImage = image; blend.maskImage = CIImage(color: CIColor(red: CGFloat(settings.intensity / 100), green: CGFloat(settings.intensity / 100), blue: CGFloat(settings.intensity / 100))).cropped(to: image.extent); image = blend.outputImage ?? graded } else { image = graded } }; if settings.bloom > 0 { let bloom = CIFilter.bloom(); bloom.inputImage = image; bloom.intensity = Float(settings.bloom); bloom.radius = 8; image = bloom.outputImage ?? image }; if settings.vignette > 0 { let v = CIFilter.vignette(); v.inputImage = image; v.intensity = Float(settings.vignette); v.radius = 1.4; image = v.outputImage ?? image }; guard let cg = context.createCGImage(image, from: image.extent) else { return source }; return UIImage(cgImage: cg, scale: source.scale, orientation: source.imageOrientation) } }
+    static func grade(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?) -> UIImage {
+        guard var image = CIImage(image: source) else { return source }
+        let controls = CIFilter.colorControls()
+        controls.inputImage = image
+        controls.saturation = Float(settings.saturation)
+        controls.brightness = Float(settings.brightness)
+        controls.contrast = Float(settings.contrast)
+        image = controls.outputImage ?? image
+
+        let exposure = CIFilter.exposureAdjust()
+        exposure.inputImage = image
+        exposure.ev = Float(settings.exposure)
+        image = exposure.outputImage ?? image
+
+        if settings.shadows != 0 || settings.highlights != 1 {
+            let tone = CIFilter.highlightShadowAdjust()
+            tone.inputImage = image
+            tone.shadowAmount = Float(max(0, settings.shadows))
+            tone.highlightAmount = Float(settings.highlights)
+            image = tone.outputImage ?? image
+        }
+
+        let tempTint = CIFilter.temperatureAndTint()
+        tempTint.inputImage = image
+        tempTint.neutral = CIVector(x: 6500, y: 0)
+        if settings.temperature != 6500 || settings.tint != 0 {
+            tempTint.targetNeutral = CIVector(x: CGFloat(settings.temperature), y: CGFloat(settings.tint))
+            image = tempTint.outputImage ?? image
+        }
+
+        let hueFilter = CIFilter.hueAdjust()
+        hueFilter.inputImage = image
+        hueFilter.angle = Float(settings.hue)
+        image = hueFilter.outputImage ?? image
+
+        let vibranceFilter = CIFilter.vibrance()
+        vibranceFilter.inputImage = image
+        vibranceFilter.amount = Float(settings.vibrance)
+        image = vibranceFilter.outputImage ?? image
+
+        let sharp = CIFilter.sharpenLuminance()
+        sharp.inputImage = image
+        sharp.sharpness = Float(settings.sharpness)
+        image = sharp.outputImage ?? image
+
+        if settings.blacks != 0 || settings.whites != 0 || settings.wheelShadows != 0 || settings.wheelMidtones != 0 || settings.wheelHighlights != 0 || settings.curveBlack != 0 || settings.curveMid != 0.5 || settings.curveWhite != 1 {
+            let levels = CIFilter.colorMatrix()
+            levels.inputImage = image
+            let blackPoint = min(0.45, max(-0.25, settings.blacks * 0.12 + settings.curveBlack))
+            let whitePoint = min(1.25, max(0.55, 1 + settings.whites * 0.12 + (settings.curveWhite - 1)))
+            let scale = CGFloat(1 / max(0.1, whitePoint - blackPoint))
+            levels.rVector = CIVector(x: scale, y: 0, z: 0, w: 0)
+            levels.gVector = CIVector(x: 0, y: scale, z: 0, w: 0)
+            levels.bVector = CIVector(x: 0, y: 0, z: scale, w: 0)
+            let warm = CGFloat(settings.wheelShadows + settings.wheelMidtones + settings.wheelHighlights) * 0.025
+            let offset = -blackPoint * scale
+            levels.biasVector = CIVector(x: offset + warm, y: offset, z: offset - warm, w: 0)
+            image = levels.outputImage ?? image
+            if settings.curveMid != 0.5 {
+                let gamma = CIFilter.gammaAdjust()
+                gamma.inputImage = image
+                gamma.power = Float(log(0.5) / log(settings.curveMid))
+                image = gamma.outputImage ?? image
+            }
+        }
+
+        if let lut {
+            let cube = CIFilter.colorCube()
+            cube.inputImage = image
+            cube.cubeDimension = Float(lut.dimension)
+            cube.cubeData = rgbaData(from: lut.values)
+            let graded = cube.outputImage ?? image
+            if settings.intensity < 100 {
+                let blend = CIFilter.blendWithMask()
+                blend.inputImage = graded
+                blend.backgroundImage = image
+                let opacity = CGFloat(settings.intensity / 100)
+                blend.maskImage = CIImage(color: CIColor(red: opacity, green: opacity, blue: opacity)).cropped(to: image.extent)
+                image = blend.outputImage ?? graded
+            } else { image = graded }
+        }
+        if settings.bloom > 0 {
+            let bloom = CIFilter.bloom(); bloom.inputImage = image; bloom.intensity = Float(settings.bloom); bloom.radius = 8
+            image = bloom.outputImage ?? image
+        }
+        if settings.vignette > 0 {
+            let vignette = CIFilter.vignette(); vignette.inputImage = image; vignette.intensity = Float(settings.vignette); vignette.radius = 1.4
+            image = vignette.outputImage ?? image
+        }
+        guard let cg = context.createCGImage(image, from: image.extent) else { return source }
+        return UIImage(cgImage: cg, scale: source.scale, orientation: source.imageOrientation)
+    }
+}
