@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 import Photos
 import UIKit
 import AVFoundation
+import AVKit
 import ImageIO
 
 private let accent = Color(red: 0.66, green: 1.0, blue: 0.16)
@@ -23,9 +24,11 @@ struct GradeSettings: Codable, Equatable {
     var temperature = 6500.0; var tint = 0.0; var highlights = 1.0; var shadows = 0.0; var whites = 0.0; var blacks = 0.0
     var hue = 0.0; var vibrance = 0.0; var sharpness = 0.0; var curveBlack = 0.0; var curveMid = 0.5; var curveWhite = 1.0
     var wheelShadows = 0.0; var wheelMidtones = 0.0; var wheelHighlights = 0.0
+    var cropAspect = "Orijinal"; var maskEnabled = false; var maskExposure = 0.0; var maskRadius = 0.55; var maskFeather = 0.25
+    var trimStart = 0.0; var trimEnd = 1.0
     var vignette = 0.0; var bloom = 0.0; var grain = 0.0
     var source = "Regular"
-    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, vignette, bloom, grain, source }
+    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, vignette, bloom, grain, source }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -50,6 +53,13 @@ struct GradeSettings: Codable, Equatable {
         wheelShadows = try c.decodeIfPresent(Double.self, forKey: .wheelShadows) ?? 0
         wheelMidtones = try c.decodeIfPresent(Double.self, forKey: .wheelMidtones) ?? 0
         wheelHighlights = try c.decodeIfPresent(Double.self, forKey: .wheelHighlights) ?? 0
+        cropAspect = try c.decodeIfPresent(String.self, forKey: .cropAspect) ?? "Orijinal"
+        maskEnabled = try c.decodeIfPresent(Bool.self, forKey: .maskEnabled) ?? false
+        maskExposure = try c.decodeIfPresent(Double.self, forKey: .maskExposure) ?? 0
+        maskRadius = try c.decodeIfPresent(Double.self, forKey: .maskRadius) ?? 0.55
+        maskFeather = try c.decodeIfPresent(Double.self, forKey: .maskFeather) ?? 0.25
+        trimStart = try c.decodeIfPresent(Double.self, forKey: .trimStart) ?? 0
+        trimEnd = try c.decodeIfPresent(Double.self, forKey: .trimEnd) ?? 1
         vignette = try c.decodeIfPresent(Double.self, forKey: .vignette) ?? 0
         bloom = try c.decodeIfPresent(Double.self, forKey: .bloom) ?? 0
         grain = try c.decodeIfPresent(Double.self, forKey: .grain) ?? 0
@@ -128,23 +138,59 @@ enum SourceDetector {
 
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
-    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Tümü"; @State private var importing = false; @State private var showShare = false
+    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Tümü"; @State private var importing = false; @State private var showShare = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
+    private var isVideo: Bool { ["mov", "mp4", "m4v"].contains(project.fileName.pathExtension.lowercased()) }
     private var lutCategories: [String] { ["Tümü"] + Array(Set(bundledLUTs.map { $0.0 })).sorted() }
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
     init(project: GradeProject) { _project = State(initialValue: project) }
-    var body: some View { NavigationStack { VStack(spacing: 0) { GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }.padding(.horizontal, 12); Picker("Düzenleme", selection: $tab) { Text("Filtreler").tag(0); Text("Ayarla").tag(1); Text("Efektler").tag(2) }.pickerStyle(.segmented).padding(); panel.padding(.horizontal).padding(.bottom, 8) }.background(Color.black).navigationTitle(project.settings.lutName).navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Kapat") { library.update(project); dismiss() } }; ToolbarItemGroup(placement: .topBarTrailing) { Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }; Button { saveToPhotos() } label: { Image(systemName: "square.and.arrow.up") } } }.onAppear { bundledLUTs = CubeLUT.loadBundled(); if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) } }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { result in if case let .success(url) = result { importedLUT = CubeLUT.load(url: url); project.settings.lutName = url.deletingPathExtension().lastPathComponent } } } }
-    private var preview: some View { Group { if let source = library.image(for: project) { Image(uiImage: ImageRenderer.grade(source, settings: project.settings, lut: importedLUT)).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18)) } else { ContentUnavailableView("Original missing", systemImage: "exclamationmark.triangle") } } }
+    var body: some View { NavigationStack { VStack(spacing: 0) { GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }.padding(.horizontal, 12); Picker("Düzenleme", selection: $tab) { Text("Filtreler").tag(0); Text("Ayarla").tag(1); Text("Efektler").tag(2) }.pickerStyle(.segmented).padding(); panel.padding(.horizontal).padding(.bottom, 8) }.background(Color.black).navigationTitle(project.settings.lutName).navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Kapat") { library.update(project); videoPlayer?.pause(); dismiss() } }; ToolbarItemGroup(placement: .topBarTrailing) { Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }; Button { saveToPhotos() } label: { Image(systemName: "square.and.arrow.up") } } }.onAppear { bundledLUTs = CubeLUT.loadBundled(); if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) }; if isVideo { let url = library.videoURL(for: project); let asset = AVURLAsset(url: url); videoPlayer = AVPlayer(url: url); Task { if let duration = try? await asset.load(.duration) { await MainActor.run { videoDuration = CMTimeGetSeconds(duration) } } } } }.onDisappear { videoPlayer?.pause() }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { result in if case let .success(url) = result { importedLUT = CubeLUT.load(url: url); project.settings.lutName = url.deletingPathExtension().lastPathComponent } }.alert("Dışa aktarma", isPresented: Binding(get: { exportMessage != nil }, set: { if !$0 { exportMessage = nil } })) { Button("Tamam", role: .cancel) { exportMessage = nil } } message: { Text(exportMessage ?? "") } } }
+    private var preview: some View { Group { if isVideo, let videoPlayer { VideoPlayer(player: videoPlayer).clipShape(RoundedRectangle(cornerRadius: 18)) } else if isVideo { ProgressView("Video yükleniyor") } else if let source = library.image(for: project) { Image(uiImage: ImageRenderer.grade(source, settings: project.settings, lut: importedLUT)).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18)) } else { ContentUnavailableView("Orijinal dosya bulunamadı", systemImage: "exclamationmark.triangle") } } }
     @ViewBuilder private var panel: some View {
         switch tab {
         case 0:
             FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: library.image(for: project), settings: project.settings)
         case 1:
-            AdjustmentPanel(settings: $project.settings)
+            AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration)
         default:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
         }
     }
-    private func saveToPhotos() { guard let image = library.image(for: project) else { return }; let output = ImageRenderer.grade(image, settings: project.settings, lut: importedLUT); PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in guard status == .authorized || status == .limited else { return }; PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } } }
+    private func saveToPhotos() {
+        if isVideo { exportTrimmedVideo(); return }
+        guard let image = library.image(for: project) else { return }
+        let output = ImageRenderer.grade(image, settings: project.settings, lut: importedLUT)
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else { DispatchQueue.main.async { exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+            PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } completionHandler: { saved, error in
+                DispatchQueue.main.async { exportMessage = saved ? "Fotoğraf arşive kaydedildi." : (error?.localizedDescription ?? "Fotoğraf kaydedilemedi.") }
+            }
+        }
+    }
+    private func exportTrimmedVideo() {
+        let asset = AVURLAsset(url: library.videoURL(for: project))
+        Task {
+            do {
+                let duration = CMTimeGetSeconds(try await asset.load(.duration))
+                let start = min(duration, max(0, duration * project.settings.trimStart))
+                let end = min(duration, max(start + 0.05, duration * project.settings.trimEnd))
+                guard end > start, let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { throw CocoaError(.fileWriteUnknown) }
+                let output = FileManager.default.temporaryDirectory.appendingPathComponent("LumaGrade-\(UUID().uuidString).mov")
+                session.outputURL = output; session.outputFileType = .mov
+                session.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600), duration: CMTime(seconds: end - start, preferredTimescale: 600))
+                let status: AVAssetExportSession.Status = await withCheckedContinuation { continuation in
+                    session.exportAsynchronously { continuation.resume(returning: session.status) }
+                }
+                guard status == .completed else { throw session.error ?? CocoaError(.fileWriteUnknown) }
+                PHPhotoLibrary.requestAuthorization(for: .addOnly) { authorization in
+                    guard authorization == .authorized || authorization == .limited else { DispatchQueue.main.async { exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+                    PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: output) } completionHandler: { saved, error in
+                        try? FileManager.default.removeItem(at: output)
+                        DispatchQueue.main.async { exportMessage = saved ? "Kesilmiş video arşive kaydedildi." : (error?.localizedDescription ?? "Video kaydedilemedi.") }
+                    }
+                }
+            } catch { await MainActor.run { exportMessage = error.localizedDescription } }
+        }
+    }
 }
 
 struct SliderPanel: View { @Binding var settings: GradeSettings; let labels: [(String, WritableKeyPath<GradeSettings, Double>, ClosedRange<Double>)]
@@ -169,6 +215,8 @@ struct SliderPanel: View { @Binding var settings: GradeSettings; let labels: [(S
 
 struct AdjustmentPanel: View {
     @Binding var settings: GradeSettings
+    var isVideo = false
+    var videoDuration = 0.0
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -188,6 +236,28 @@ struct AdjustmentPanel: View {
                     adjust("Doygunluk", \.saturation, 0...2)
                     adjust("Keskinlik", \.sharpness, 0...2)
                     adjust("Vinyet", \.vignette, 0...2)
+                }
+                DisclosureGroup("Maske") {
+                    Toggle("Merkez maskesini etkinleştir", isOn: $settings.maskEnabled)
+                    adjust("Maskeli pozlama", \.maskExposure, -3...3)
+                    adjust("Maske boyutu", \.maskRadius, 0.1...1)
+                    adjust("Kenar yumuşatma", \.maskFeather, 0.02...0.6)
+                }
+                DisclosureGroup("Kırpma") {
+                    Picker("En-boy oranı", selection: $settings.cropAspect) {
+                        ForEach(["Orijinal", "1:1", "4:5", "16:9", "9:16"], id: \.self) { Text($0).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                if isVideo && videoDuration > 0 {
+                    DisclosureGroup("Video kesme · \(time(settings.trimStart * videoDuration)) – \(time(settings.trimEnd * videoDuration))") {
+                        VStack(alignment: .leading) {
+                            Text("Başlangıç · \(time(settings.trimStart * videoDuration))").font(.caption)
+                            Slider(value: Binding(get: { settings.trimStart }, set: { settings.trimStart = min($0, settings.trimEnd) }), in: 0...1).tint(accent)
+                            Text("Bitiş · \(time(settings.trimEnd * videoDuration))").font(.caption)
+                            Slider(value: Binding(get: { settings.trimEnd }, set: { settings.trimEnd = max($0, settings.trimStart) }), in: 0...1).tint(accent)
+                        }
+                    }
                 }
                 DisclosureGroup("Renk tekerleri") {
                     adjust("Gölgeler", \.wheelShadows, -1...1)
@@ -210,6 +280,7 @@ struct AdjustmentPanel: View {
             Slider(value: Binding(get: { settings[keyPath: key] }, set: { settings[keyPath: key] = $0 }), in: range).tint(accent)
         }
     }
+    private func time(_ seconds: Double) -> String { let value = max(0, Int(seconds)); return String(format: "%02d:%02d", value / 60, value % 60) }
 }
 
 struct FilterBrowser: View {
@@ -330,6 +401,7 @@ enum ImageRenderer { static let context = CIContext()
     }
     static func grade(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?) -> UIImage {
         guard var image = CIImage(image: source) else { return source }
+        image = crop(image, aspect: settings.cropAspect)
         let controls = CIFilter.colorControls()
         controls.inputImage = image
         controls.saturation = Float(settings.saturation)
@@ -409,6 +481,25 @@ enum ImageRenderer { static let context = CIContext()
                 image = blend.outputImage ?? graded
             } else { image = graded }
         }
+        if settings.maskEnabled && settings.maskExposure != 0 {
+            let radius = Float(min(image.extent.width, image.extent.height) * settings.maskRadius * 0.5)
+            let feather = Float(min(image.extent.width, image.extent.height) * settings.maskFeather * 0.5)
+            let radial = CIFilter.radialGradient()
+            radial.center = CGPoint(x: image.extent.midX, y: image.extent.midY)
+            radial.radius0 = radius
+            radial.radius1 = radius + max(1, feather)
+            radial.color0 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+            radial.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
+            let mask = radial.outputImage?.cropped(to: image.extent)
+            let localExposure = CIFilter.exposureAdjust()
+            localExposure.inputImage = image
+            localExposure.ev = Float(settings.maskExposure)
+            let blend = CIFilter.blendWithMask()
+            blend.inputImage = localExposure.outputImage ?? image
+            blend.backgroundImage = image
+            blend.maskImage = mask
+            image = blend.outputImage ?? image
+        }
         if settings.bloom > 0 {
             let bloom = CIFilter.bloom(); bloom.inputImage = image; bloom.intensity = Float(settings.bloom); bloom.radius = 8
             image = bloom.outputImage ?? image
@@ -419,5 +510,27 @@ enum ImageRenderer { static let context = CIContext()
         }
         guard let cg = context.createCGImage(image, from: image.extent) else { return source }
         return UIImage(cgImage: cg, scale: source.scale, orientation: source.imageOrientation)
+    }
+
+    private static func crop(_ image: CIImage, aspect: String) -> CIImage {
+        let targetRatio: CGFloat
+        switch aspect {
+        case "1:1": targetRatio = 1
+        case "4:5": targetRatio = 4.0 / 5.0
+        case "16:9": targetRatio = 16.0 / 9.0
+        case "9:16": targetRatio = 9.0 / 16.0
+        default: return image
+        }
+        let extent = image.extent
+        let sourceRatio = extent.width / extent.height
+        let rect: CGRect
+        if sourceRatio > targetRatio {
+            let width = extent.height * targetRatio
+            rect = CGRect(x: extent.midX - width / 2, y: extent.minY, width: width, height: extent.height)
+        } else {
+            let height = extent.width / targetRatio
+            rect = CGRect(x: extent.minX, y: extent.midY - height / 2, width: extent.width, height: height)
+        }
+        return image.cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
     }
 }
