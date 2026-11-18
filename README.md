@@ -1,31 +1,31 @@
-# LUT Editor for iPhone
+# LumaGrade
 
-Personal, on-device iOS video editor project. It has no account, subscription, analytics, or cloud upload code. Video processing and LUT rendering use Apple's AVFoundation and Core Image frameworks on the iPhone.
+LumaGrade is an iOS 17+ photo and video color-grading application built as a clean-room project. It is designed to be signed with a personal Apple developer account and installed through AltStore.
 
-## Included in this first build
+## What is included
 
-- Video selection from Photos and local playback
-- Local project history with saved per-video editing settings
-- LUT browser with the bundled `.cube` files and intensity control
-- Import of additional `.cube` files
-- Adjust panel for hue, exposure, contrast, highlights, shadows, temperature, vibrance, saturation, sharpness, vignette, and curves
-- Bloom, grain, and halation controls
-- Local saved presets
-- Playback scrubber, loop, original comparison, pinch zoom, and full-screen preview
-- Highest quality, 1080p, or 720p export to the Photos library
+- Project library with persistent image projects
+- Photos picker, image editing, save/share, and video project placeholders
+- `.cube` LUT file import with 3D Cube parsing (2, 3, 4, ... 64/65 grids)
+- LUT intensity, exposure, contrast, saturation, brightness, warmth, tint, highlights, shadows, vignette, bloom, and grain controls
+- Filters / Adjust / Effects editor panel, presets, and a dark, responsive iPhone/iPad layout
+- No app groups, push-notification entitlement, private API, tracking SDK, or paid-provisioning requirement
 
-## Build on a Mac
+## Build and AltStore installation
 
-1. Open `LUTStudioOffline.xcodeproj` in Xcode.
-2. Select the `LUTStudioOffline` app target and choose a signing team under **Signing & Capabilities**.
-3. Connect the iPhone, select it as the run destination, and press **Run**.
+1. Open `LumaGrade.xcodeproj` on a Mac with Xcode 15 or newer.
+2. In **Signing & Capabilities**, select your personal team and set a unique bundle identifier (for example `com.yourname.lumagrade`).
+3. Select an iPhone running iOS 17 or newer and build once. Grant photo-library permission when prompted.
+4. Use **Product → Archive**, export an ad-hoc/development IPA, then install it with AltStore; alternatively use AltStore's IPA signing flow with your Apple ID.
 
-The project targets iOS 17 or later. This project has not yet been built in the current Windows workspace.
+The project deliberately has no App Group or Push Notifications capability, so it works with free developer signing subject to Apple's normal seven-day refresh requirement.
 
-## Build without owning a Mac
+## LUT content
 
-The included GitHub Actions workflow runs the iPhone build on GitHub's hosted macOS runner and saves an unsigned IPA as a workflow artifact. It uploads the app source and bundled LUTs for the build; it does not upload any of your videos. To use it, put this folder in a private GitHub repository and run **Actions → Build iPhone app → Run workflow**.
+This repository contains no third-party LUT catalogue. Import LUTs you are licensed to use from the Filters tab. The app accepts standard text `.cube` LUTs that declare `LUT_3D_SIZE` and RGB triplets.
 
-On Windows, AltServer can sideload the resulting IPA to an iPhone and sign it with the Apple Account you enter in AltServer. Keep your Apple password in AltServer; do not send it in chat. With a free Apple account, the install needs refreshing about every 7 days. AltStore can refresh it when AltServer is running on the same Wi-Fi network or the phone is connected over USB.
+## Next implementation milestones
 
-The app itself processes the video locally. The hosted build only needs the source project and included LUT files.
+1. Add AVFoundation frame rendering and video export.
+2. Add mask/crop/trim controls and Metal implementations of the advanced effects.
+3. Add screenshot-based device QA for iPhone SE, standard iPhone, Max iPhone, and iPad.
