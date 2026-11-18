@@ -207,7 +207,7 @@ struct AdjustmentPanel: View {
     private func adjust(_ title: String, _ key: WritableKeyPath<GradeSettings, Double>, _ range: ClosedRange<Double>) -> some View {
         VStack(spacing: 2) {
             HStack { Text(title).font(.caption); Spacer(); Text(settings[keyPath: key], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) }
-            Slider(value: $settings[keyPath: key], in: range).tint(accent)
+            Slider(value: Binding(get: { settings[keyPath: key] }, set: { settings[keyPath: key] = $0 }), in: range).tint(accent)
         }
     }
 }
