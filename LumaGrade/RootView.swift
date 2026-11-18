@@ -591,7 +591,7 @@ struct AdjustmentPanel: View {
                     adjust("Sıcaklık", \.temperature, 2000...12000)
                     adjust("Tint", \.tint, -100...100)
                     adjust("Kontrast", \.contrast, 0...2)
-                    adjust("Hue", \.hue, -Double.pi...Double.pi)
+                    hueAdjustment
                     adjust("HLS · Açıklık", \.brightness, -0.5...0.5)
                     adjust("Canlılık", \.vibrance, -1...1)
                     adjust("Doygunluk", \.saturation, 0...2)
@@ -639,6 +639,20 @@ struct AdjustmentPanel: View {
         VStack(spacing: 2) {
             HStack { Text(title).font(.caption); Spacer(); Text(settings[keyPath: key], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) }
             Slider(value: Binding(get: { settings[keyPath: key] }, set: { settings[keyPath: key] = $0 }), in: range).tint(accent)
+        }
+    }
+    private var hueAdjustment: some View {
+        VStack(spacing: 2) {
+            HStack {
+                Text("Hue").font(.caption)
+                Spacer()
+                Text("\(Int((settings.hue * 180 / Double.pi).rounded()))°")
+                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+            }
+            Slider(value: Binding(
+                get: { settings.hue * 180 / Double.pi },
+                set: { settings.hue = $0 * Double.pi / 180 }
+            ), in: -180...180).tint(accent)
         }
     }
     private func time(_ seconds: Double) -> String { let value = max(0, Int(seconds)); return String(format: "%02d:%02d", value / 60, value % 60) }
@@ -834,6 +848,27 @@ enum ImageRenderer { static let context = CIContext()
     static func grade(_ source: CIImage, settings: GradeSettings, lut: CubeLUT?) -> CIImage {
         var image = source
         image = crop(image, aspect: settings.cropAspect)
+
+        // Apply the selected filter first so finishing adjustments remain visible over it.
+        if let lut {
+            let cube = CIFilter.colorCube()
+            cube.inputImage = image
+            cube.cubeDimension = Float(lut.dimension)
+            cube.cubeData = rgbaData(from: lut.values, dimension: lut.dimension)
+            if let graded = cube.outputImage {
+                if settings.intensity < 100 {
+                    let blend = CIFilter.blendWithMask()
+                    blend.inputImage = graded
+                    blend.backgroundImage = image
+                    let opacity = CGFloat(min(100, max(0, settings.intensity)) / 100)
+                    blend.maskImage = CIImage(color: CIColor(red: opacity, green: opacity, blue: opacity)).cropped(to: image.extent)
+                    image = blend.outputImage ?? graded
+                } else {
+                    image = graded
+                }
+            }
+        }
+
         let controls = CIFilter.colorControls()
         controls.inputImage = image
         controls.saturation = Float(settings.saturation)
@@ -849,7 +884,7 @@ enum ImageRenderer { static let context = CIContext()
         if settings.shadows != 0 || settings.highlights != 1 {
             let tone = CIFilter.highlightShadowAdjust()
             tone.inputImage = image
-            tone.shadowAmount = Float(max(0, settings.shadows))
+            tone.shadowAmount = Float(settings.shadows)
             tone.highlightAmount = Float(settings.highlights)
             image = tone.outputImage ?? image
         }
@@ -886,9 +921,11 @@ enum ImageRenderer { static let context = CIContext()
             levels.rVector = CIVector(x: scale, y: 0, z: 0, w: 0)
             levels.gVector = CIVector(x: 0, y: scale, z: 0, w: 0)
             levels.bVector = CIVector(x: 0, y: 0, z: scale, w: 0)
-            let warm = CGFloat(settings.wheelShadows + settings.wheelMidtones + settings.wheelHighlights) * 0.025
             let offset = -blackPoint * scale
-            levels.biasVector = CIVector(x: offset + warm, y: offset, z: offset - warm, w: 0)
+            let redBalance = CGFloat(settings.wheelShadows * 0.025 + settings.wheelMidtones * 0.035 + settings.wheelHighlights * 0.045)
+            let greenBalance = CGFloat(-settings.wheelShadows * 0.005 + settings.wheelMidtones * 0.004 - settings.wheelHighlights * 0.005)
+            let blueBalance = CGFloat(-settings.wheelShadows * 0.035 - settings.wheelMidtones * 0.025 - settings.wheelHighlights * 0.045)
+            levels.biasVector = CIVector(x: offset + redBalance, y: offset + greenBalance, z: offset + blueBalance, w: 0)
             image = levels.outputImage ?? image
             if settings.curveMid != 0.5 {
                 let gamma = CIFilter.gammaAdjust()
@@ -898,21 +935,6 @@ enum ImageRenderer { static let context = CIContext()
             }
         }
 
-        if let lut {
-            let cube = CIFilter.colorCube()
-            cube.inputImage = image
-            cube.cubeDimension = Float(lut.dimension)
-            cube.cubeData = rgbaData(from: lut.values, dimension: lut.dimension)
-            let graded = cube.outputImage ?? image
-            if settings.intensity < 100 {
-                let blend = CIFilter.blendWithMask()
-                blend.inputImage = graded
-                blend.backgroundImage = image
-                let opacity = CGFloat(settings.intensity / 100)
-                blend.maskImage = CIImage(color: CIColor(red: opacity, green: opacity, blue: opacity)).cropped(to: image.extent)
-                image = blend.outputImage ?? graded
-            } else { image = graded }
-        }
         if settings.maskEnabled && settings.maskExposure != 0 {
             let radius = Float(min(image.extent.width, image.extent.height) * settings.maskRadius * 0.5)
             let feather = Float(min(image.extent.width, image.extent.height) * settings.maskFeather * 0.5)
@@ -939,6 +961,22 @@ enum ImageRenderer { static let context = CIContext()
         if settings.vignette > 0 {
             let vignette = CIFilter.vignette(); vignette.inputImage = image; vignette.intensity = Float(settings.vignette); vignette.radius = 1.4
             image = vignette.outputImage ?? image
+        }
+        if settings.grain > 0, let noise = CIFilter.randomGenerator().outputImage?.cropped(to: image.extent) {
+            let monochrome = CIFilter.colorControls()
+            monochrome.inputImage = noise
+            monochrome.saturation = 0
+            let softLight = CIFilter.softLightBlendMode()
+            softLight.inputImage = monochrome.outputImage ?? noise
+            softLight.backgroundImage = image
+            if let textured = softLight.outputImage {
+                let blend = CIFilter.blendWithMask()
+                blend.inputImage = textured
+                blend.backgroundImage = image
+                let amount = CGFloat(min(1, max(0, settings.grain)) * 0.35)
+                blend.maskImage = CIImage(color: CIColor(red: amount, green: amount, blue: amount)).cropped(to: image.extent)
+                image = blend.outputImage ?? textured
+            }
         }
         return image
     }
