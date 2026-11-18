@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euxo pipefail
           APP_PATH="build/Build/Products/Release-iphoneos/LumaGrade.app"
-          test -s "$APP_PATH/Assets.car"
+          test -s "$APP_PATH/LumaGrade"
           plutil -lint "$APP_PATH/Info.plist"
           test -d "$APP_PATH/LUTs"
           LUT_COUNT=$(find "$APP_PATH/LUTs" -type f -name '*.lutf' | wc -l | tr -d ' ')
