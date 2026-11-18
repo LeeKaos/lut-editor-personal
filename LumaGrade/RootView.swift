@@ -76,8 +76,24 @@ final class ProjectLibrary: ObservableObject {
     @Published var projects: [GradeProject] = [] { didSet { save() } }
     private let key = "lumagrade.projects.v1"
     init() { guard let data = UserDefaults.standard.data(forKey: key), let stored = try? JSONDecoder().decode([GradeProject].self, from: data) else { return }; projects = stored }
-    func add(image: UIImage, source: String = "Regular") -> GradeProject? { guard let data = image.jpegData(compressionQuality: 0.96) else { return nil }; let name = "\(UUID().uuidString).jpg"; let url = documents.appendingPathComponent(name); do { try data.write(to: url, options: .atomic); var settings = GradeSettings(); settings.source = source; let project = GradeProject(fileName: name, settings: settings); projects.insert(project, at: 0); return project } catch { return nil } }
-    func add(video source: URL, profile: String = "Regular") -> GradeProject? { let ext = source.pathExtension.isEmpty ? "mov" : source.pathExtension; let name = "\(UUID().uuidString).\(ext)"; let destination = documents.appendingPathComponent(name); do { try FileManager.default.copyItem(at: source, to: destination); var settings = GradeSettings(); settings.source = profile; let project = GradeProject(fileName: name, settings: settings); projects.insert(project, at: 0); return project } catch { return nil } }
+    func add(imageData data: Data, fileExtension: String, source: String = "Regular") throws -> GradeProject {
+        let safeExtension = fileExtension.isEmpty ? "jpg" : fileExtension
+        let name = "\(UUID().uuidString).\(safeExtension)"
+        try data.write(to: documents.appendingPathComponent(name), options: .atomic)
+        var settings = GradeSettings(); settings.source = source
+        let project = GradeProject(fileName: name, settings: settings)
+        projects.insert(project, at: 0)
+        return project
+    }
+    func add(video source: URL, profile: String = "Regular") throws -> GradeProject {
+        let ext = source.pathExtension.isEmpty ? "mov" : source.pathExtension
+        let name = "\(UUID().uuidString).\(ext)"
+        try FileManager.default.copyItem(at: source, to: documents.appendingPathComponent(name))
+        var settings = GradeSettings(); settings.source = profile
+        let project = GradeProject(fileName: name, settings: settings)
+        projects.insert(project, at: 0)
+        return project
+    }
     func videoURL(for project: GradeProject) -> URL { documents.appendingPathComponent(project.fileName) }
     func image(for project: GradeProject) -> UIImage? { UIImage(contentsOfFile: documents.appendingPathComponent(project.fileName).path) }
     func update(_ project: GradeProject) { guard let index = projects.firstIndex(where: { $0.id == project.id }) else { return }; projects[index] = project }
@@ -93,15 +109,114 @@ struct RootView: View {
 
 struct ProjectsView: View {
     @EnvironmentObject private var library: ProjectLibrary
-    @State private var pickerItem: PhotosPickerItem?; @State private var videoItem: PhotosPickerItem?; @State private var editor: GradeProject?; @State private var importing = false; @State private var choosingMedia = false
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var videoItem: PhotosPickerItem?
+    @State private var editor: GradeProject?
+    @State private var importingLUT = false
+    @State private var choosingMedia = false
+    @State private var showingImagePicker = false
+    @State private var showingVideoPicker = false
+    @State private var isImportingMedia = false
+    @State private var importError: String?
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 12)]
-    var body: some View { NavigationStack { ZStack(alignment: .bottom) { Group { if library.projects.isEmpty { empty } else { ScrollView { LazyVGrid(columns: columns, spacing: 16) { ForEach(library.projects) { project in card(project) } }.padding(16).padding(.bottom, 80) } } }.navigationTitle("Projeler").toolbar { ToolbarItem(placement: .topBarTrailing) { Menu { PhotosPicker(selection: $pickerItem, matching: .images) { Label("Fotoğraf Ekle", systemImage: "photo") }; PhotosPicker(selection: $videoItem, matching: .videos) { Label("Video Ekle", systemImage: "video") }; Button { importing = true } label: { Label("LUT İçe Aktar", systemImage: "cube.transparent") } } label: { Image(systemName: "plus") } } }
-            Button { choosingMedia = true } label: { Label("Yeni Proje", systemImage: "plus").font(.headline).padding(.horizontal, 20).frame(height: 54).background(accent, in: Capsule()).foregroundStyle(.black) }.padding(.bottom, 18) }
-        }.confirmationDialog("Yeni Proje", isPresented: $choosingMedia, titleVisibility: .visible) { PhotosPicker(selection: $pickerItem, matching: .images) { Label("Fotoğraf Seç", systemImage: "photo") }; PhotosPicker(selection: $videoItem, matching: .videos) { Label("Video Seç", systemImage: "video") } }.onChange(of: pickerItem) { _, item in importImage(item) }.onChange(of: videoItem) { _, item in importVideo(item) }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { _ in }.fullScreenCover(item: $editor) { EditorView(project: $0) } }
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Group {
+                    if library.projects.isEmpty { empty }
+                    else {
+                        ScrollView {
+                            LazyVGrid(columns: columns, spacing: 16) {
+                                ForEach(library.projects) { project in card(project) }
+                            }.padding(16).padding(.bottom, 80)
+                        }
+                    }
+                }
+                Button { choosingMedia = true } label: {
+                    Label("Yeni Proje", systemImage: "plus")
+                        .font(.headline).padding(.horizontal, 20).frame(height: 54)
+                        .background(accent, in: Capsule()).foregroundStyle(.black)
+                }
+                .padding(.bottom, 18)
+                .disabled(isImportingMedia)
+                if isImportingMedia {
+                    Color.black.opacity(0.42).ignoresSafeArea()
+                    ProgressView("Medya içe aktarılıyor…")
+                        .padding(22).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                }
+            }
+            .navigationTitle("Projeler")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { showingImagePicker = true } label: { Label("Fotoğraf Ekle", systemImage: "photo") }
+                        Button { showingVideoPicker = true } label: { Label("Video Ekle", systemImage: "video") }
+                        Button { importingLUT = true } label: { Label("LUT İçe Aktar", systemImage: "cube.transparent") }
+                    } label: { Image(systemName: "plus") }
+                    .disabled(isImportingMedia)
+                }
+            }
+            .confirmationDialog("Yeni Proje", isPresented: $choosingMedia, titleVisibility: .visible) {
+                Button("Fotoğraf Seç", systemImage: "photo") { showingImagePicker = true }
+                Button("Video Seç", systemImage: "video") { showingVideoPicker = true }
+            }
+            .photosPicker(isPresented: $showingImagePicker, selection: $pickerItem, matching: .images)
+            .photosPicker(isPresented: $showingVideoPicker, selection: $videoItem, matching: .videos)
+            .onChange(of: pickerItem) { _, item in if let item { importImage(item) } }
+            .onChange(of: videoItem) { _, item in if let item { importVideo(item) } }
+            .fileImporter(isPresented: $importingLUT, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { _ in }
+            .fullScreenCover(item: $editor) { EditorView(project: $0) }
+            .alert("Medya eklenemedi", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+                Button("Tamam", role: .cancel) { importError = nil }
+            } message: { Text(importError ?? "Fotoğraf veya video içe aktarılamadı.") }
+        }
+    }
     private var empty: some View { ContentUnavailableView("İlk düzenlemeni oluştur", systemImage: "camera.filters", description: Text("Fotoğraf seç, LUT uygula ve görünümünü kaydet.")) }
     private func card(_ project: GradeProject) -> some View { Button { editor = project } label: { VStack(alignment: .leading, spacing: 7) { Group { if let image = library.image(for: project) { Image(uiImage: image).resizable().scaledToFill() } else { Color.gray } }.frame(height: 126).clipShape(RoundedRectangle(cornerRadius: 14)); Text(project.settings.lutName).font(.caption.weight(.semibold)).lineLimit(1); Text(project.createdAt, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.secondary) }.contentShape(Rectangle()) }.buttonStyle(.plain).contextMenu { Button(role: .destructive) { library.remove(project) } label: { Label("Delete", systemImage: "trash") } } }
-    private func importImage(_ item: PhotosPickerItem?) { Task { guard let data = try? await item?.loadTransferable(type: Data.self), let image = UIImage(data: data), let project = library.add(image: image, source: SourceDetector.fromImage(data)) else { return }; await MainActor.run { editor = project; pickerItem = nil } } }
-    private func importVideo(_ item: PhotosPickerItem?) { Task { guard let movie = try? await item?.loadTransferable(type: PickedMovie.self), let project = library.add(video: movie.url, profile: SourceDetector.fromVideo(movie.url)) else { return }; await MainActor.run { editor = project; videoItem = nil } } }
+    private func importImage(_ item: PhotosPickerItem) {
+        Task { @MainActor in
+            isImportingMedia = true
+            defer { isImportingMedia = false; pickerItem = nil }
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    throw MediaImportError.imageDataUnavailable
+                }
+                guard UIImage(data: data) != nil else { throw MediaImportError.invalidImage }
+                let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+                let project = try library.add(imageData: data, fileExtension: ext, source: SourceDetector.fromImage(data))
+                editor = project
+            } catch {
+                importError = "Fotoğraf alınamadı: \(error.localizedDescription)"
+            }
+        }
+    }
+    private func importVideo(_ item: PhotosPickerItem) {
+        Task { @MainActor in
+            isImportingMedia = true
+            defer { isImportingMedia = false; videoItem = nil }
+            do {
+                let movie = try await item.loadTransferable(type: PickedMovie.self)
+                guard let movie else { throw MediaImportError.videoDataUnavailable }
+                let project = try library.add(video: movie.url, profile: SourceDetector.fromVideo(movie.url))
+                editor = project
+            } catch {
+                importError = "Video alınamadı: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+private enum MediaImportError: LocalizedError {
+    case imageDataUnavailable
+    case invalidImage
+    case videoDataUnavailable
+    var errorDescription: String? {
+        switch self {
+        case .imageDataUnavailable: return "Fotoğraf verisi Fotoğraflar’dan alınamadı."
+        case .invalidImage: return "Seçilen dosya geçerli bir fotoğraf olarak açılamadı."
+        case .videoDataUnavailable: return "Video dosyası Fotoğraflar’dan alınamadı."
+        }
+    }
 }
 
 struct PickedMovie: Transferable {
