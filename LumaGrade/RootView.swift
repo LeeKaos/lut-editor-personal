@@ -5,6 +5,7 @@ import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
 import Photos
 import UIKit
+import AVFoundation
 
 private let accent = Color(red: 0.66, green: 1.0, blue: 0.16)
 
@@ -19,6 +20,26 @@ struct GradeProject: Identifiable, Codable, Equatable {
 struct GradeSettings: Codable, Equatable {
     var lutName = "Original"; var intensity = 100.0; var exposure = 0.0; var contrast = 1.0; var saturation = 1.0; var brightness = 0.0
     var temperature = 6500.0; var tint = 0.0; var highlights = 1.0; var shadows = 0.0; var vignette = 0.0; var bloom = 0.0; var grain = 0.0
+    var source = "Regular"
+    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, vignette, bloom, grain, source }
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lutName = try c.decodeIfPresent(String.self, forKey: .lutName) ?? "Original"
+        intensity = try c.decodeIfPresent(Double.self, forKey: .intensity) ?? 100
+        exposure = try c.decodeIfPresent(Double.self, forKey: .exposure) ?? 0
+        contrast = try c.decodeIfPresent(Double.self, forKey: .contrast) ?? 1
+        saturation = try c.decodeIfPresent(Double.self, forKey: .saturation) ?? 1
+        brightness = try c.decodeIfPresent(Double.self, forKey: .brightness) ?? 0
+        temperature = try c.decodeIfPresent(Double.self, forKey: .temperature) ?? 6500
+        tint = try c.decodeIfPresent(Double.self, forKey: .tint) ?? 0
+        highlights = try c.decodeIfPresent(Double.self, forKey: .highlights) ?? 1
+        shadows = try c.decodeIfPresent(Double.self, forKey: .shadows) ?? 0
+        vignette = try c.decodeIfPresent(Double.self, forKey: .vignette) ?? 0
+        bloom = try c.decodeIfPresent(Double.self, forKey: .bloom) ?? 0
+        grain = try c.decodeIfPresent(Double.self, forKey: .grain) ?? 0
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? "Regular"
+    }
 }
 
 final class ProjectLibrary: ObservableObject {
@@ -26,6 +47,8 @@ final class ProjectLibrary: ObservableObject {
     private let key = "lumagrade.projects.v1"
     init() { guard let data = UserDefaults.standard.data(forKey: key), let stored = try? JSONDecoder().decode([GradeProject].self, from: data) else { return }; projects = stored }
     func add(image: UIImage) -> GradeProject? { guard let data = image.jpegData(compressionQuality: 0.96) else { return nil }; let name = "\(UUID().uuidString).jpg"; let url = documents.appendingPathComponent(name); do { try data.write(to: url, options: .atomic); let project = GradeProject(fileName: name); projects.insert(project, at: 0); return project } catch { return nil } }
+    func add(video source: URL) -> GradeProject? { let ext = source.pathExtension.isEmpty ? "mov" : source.pathExtension; let name = "\(UUID().uuidString).\(ext)"; let destination = documents.appendingPathComponent(name); do { try FileManager.default.copyItem(at: source, to: destination); let project = GradeProject(fileName: name); projects.insert(project, at: 0); return project } catch { return nil } }
+    func videoURL(for project: GradeProject) -> URL { documents.appendingPathComponent(project.fileName) }
     func image(for project: GradeProject) -> UIImage? { UIImage(contentsOfFile: documents.appendingPathComponent(project.fileName).path) }
     func update(_ project: GradeProject) { guard let index = projects.firstIndex(where: { $0.id == project.id }) else { return }; projects[index] = project }
     func remove(_ project: GradeProject) { try? FileManager.default.removeItem(at: documents.appendingPathComponent(project.fileName)); projects.removeAll { $0.id == project.id } }
@@ -40,14 +63,28 @@ struct RootView: View {
 
 struct ProjectsView: View {
     @EnvironmentObject private var library: ProjectLibrary
-    @State private var pickerItem: PhotosPickerItem?; @State private var editor: GradeProject?; @State private var importing = false
+    @State private var pickerItem: PhotosPickerItem?; @State private var videoItem: PhotosPickerItem?; @State private var editor: GradeProject?; @State private var importing = false; @State private var choosingMedia = false
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 12)]
-    var body: some View { NavigationStack { ZStack(alignment: .bottom) { Group { if library.projects.isEmpty { empty } else { ScrollView { LazyVGrid(columns: columns, spacing: 16) { ForEach(library.projects) { project in card(project) } }.padding(16).padding(.bottom, 80) } } }.navigationTitle("Projeler").toolbar { ToolbarItem(placement: .topBarTrailing) { Menu { PhotosPicker(selection: $pickerItem, matching: .images) { Label("Fotoğraf Ekle", systemImage: "photo") }; Button { importing = true } label: { Label("LUT İçe Aktar", systemImage: "cube.transparent") } } label: { Image(systemName: "plus") } } }
-            PhotosPicker(selection: $pickerItem, matching: .images) { Label("Yeni Proje", systemImage: "plus").font(.headline).padding(.horizontal, 20).frame(height: 54).background(accent, in: Capsule()).foregroundStyle(.black) }.padding(.bottom, 18) }
-        }.onChange(of: pickerItem) { _, item in importImage(item) }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { _ in }.fullScreenCover(item: $editor) { EditorView(project: $0) } }
+    var body: some View { NavigationStack { ZStack(alignment: .bottom) { Group { if library.projects.isEmpty { empty } else { ScrollView { LazyVGrid(columns: columns, spacing: 16) { ForEach(library.projects) { project in card(project) } }.padding(16).padding(.bottom, 80) } } }.navigationTitle("Projeler").toolbar { ToolbarItem(placement: .topBarTrailing) { Menu { PhotosPicker(selection: $pickerItem, matching: .images) { Label("Fotoğraf Ekle", systemImage: "photo") }; PhotosPicker(selection: $videoItem, matching: .videos) { Label("Video Ekle", systemImage: "video") }; Button { importing = true } label: { Label("LUT İçe Aktar", systemImage: "cube.transparent") } } label: { Image(systemName: "plus") } } }
+            Button { choosingMedia = true } label: { Label("Yeni Proje", systemImage: "plus").font(.headline).padding(.horizontal, 20).frame(height: 54).background(accent, in: Capsule()).foregroundStyle(.black) }.padding(.bottom, 18) }
+        }.confirmationDialog("Yeni Proje", isPresented: $choosingMedia, titleVisibility: .visible) { PhotosPicker(selection: $pickerItem, matching: .images) { Label("Fotoğraf Seç", systemImage: "photo") }; PhotosPicker(selection: $videoItem, matching: .videos) { Label("Video Seç", systemImage: "video") } }.onChange(of: pickerItem) { _, item in importImage(item) }.onChange(of: videoItem) { _, item in importVideo(item) }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { _ in }.fullScreenCover(item: $editor) { EditorView(project: $0) } }
     private var empty: some View { ContentUnavailableView("İlk düzenlemeni oluştur", systemImage: "camera.filters", description: Text("Fotoğraf seç, LUT uygula ve görünümünü kaydet.")) }
     private func card(_ project: GradeProject) -> some View { Button { editor = project } label: { VStack(alignment: .leading, spacing: 7) { Group { if let image = library.image(for: project) { Image(uiImage: image).resizable().scaledToFill() } else { Color.gray } }.frame(height: 126).clipShape(RoundedRectangle(cornerRadius: 14)); Text(project.settings.lutName).font(.caption.weight(.semibold)).lineLimit(1); Text(project.createdAt, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.secondary) }.contentShape(Rectangle()) }.buttonStyle(.plain).contextMenu { Button(role: .destructive) { library.remove(project) } label: { Label("Delete", systemImage: "trash") } } }
     private func importImage(_ item: PhotosPickerItem?) { Task { guard let data = try? await item?.loadTransferable(type: Data.self), let image = UIImage(data: data), let project = library.add(image: image) else { return }; await MainActor.run { editor = project; pickerItem = nil } } }
+    private func importVideo(_ item: PhotosPickerItem?) { Task { guard let movie = try? await item?.loadTransferable(type: PickedMovie.self), let project = library.add(video: movie.url) else { return }; await MainActor.run { editor = project; videoItem = nil } } }
+}
+
+struct PickedMovie: Transferable {
+    let url: URL
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie, shouldAttemptToOpenInPlace: false) { received in
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let destination = folder.appendingPathComponent(received.file.lastPathComponent)
+            try FileManager.default.copyItem(at: received.file, to: destination)
+            return PickedMovie(url: destination)
+        }
+    }
 }
 
 struct EditorView: View {
