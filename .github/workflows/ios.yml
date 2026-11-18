@@ -19,6 +19,9 @@ jobs:
           APP_PATH="build/Build/Products/Release-iphoneos/LumaGrade.app"
           test -s "$APP_PATH/Assets.car"
           plutil -lint "$APP_PATH/Info.plist"
+          test -d "$APP_PATH/LUTs"
+          LUT_COUNT=$(find "$APP_PATH/LUTs" -type f -name '*.lutf' | wc -l | tr -d ' ')
+          test "$LUT_COUNT" -eq 100
           ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/LumaGrade")
           [[ " $ARCHS " == *" arm64 "* ]]
       - name: Package unsigned IPA
