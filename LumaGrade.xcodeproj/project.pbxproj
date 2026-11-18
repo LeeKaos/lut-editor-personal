@@ -3,6 +3,7 @@
 /* Begin PBXBuildFile section */
   A001 /* LumaGradeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A101; };
   A002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102; };
+  A003 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = A106; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
   A101 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaGradeApp.swift; sourceTree = "<group>"; };
@@ -10,10 +11,11 @@
   A103 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
   A104 = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumaGrade.entitlements; sourceTree = "<group>"; };
   A105 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LumaGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
+  A106 = {isa = PBXFileReference; lastKnownFileType = folder; path = LUTs; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXGroup section */
   A201 = {isa = PBXGroup; children = (A202, A203); sourceTree = "<group>"; };
-  A202 = {isa = PBXGroup; children = (A101, A102, A103, A104); path = LumaGrade; sourceTree = "<group>"; };
+  A202 = {isa = PBXGroup; children = (A101, A102, A103, A104, A106); path = LumaGrade; sourceTree = "<group>"; };
   A203 = {isa = PBXGroup; children = (A105); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
@@ -23,7 +25,7 @@
   A601 = {isa = PBXProject; attributes = { LastUpgradeCheck = 1500; TargetAttributes = { A301 = { CreatedOnToolsVersion = 15.0; }; }; }; buildConfigurationList = A402; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A201; productRefGroup = A203; projectDirPath = ""; projectRoot = ""; targets = (A301); };
 /* End PBXProject section */
 /* Begin PBXResourcesBuildPhase section */
-  A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A003); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
   A502 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A001, A002); runOnlyForDeploymentPostprocessing = 0; };
