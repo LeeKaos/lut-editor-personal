@@ -258,7 +258,7 @@ enum SourceDetector {
 
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
-    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Tümü"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
+    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Tümü"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
     @State private var lutLoadError: String?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
@@ -306,6 +306,10 @@ struct EditorView: View {
                 else if let match = bundledLUTs.first(where: { $0.1 == name }) { importedLUT = CubeLUT.load(url: match.2) }
                 updateVideoComposition()
             }
+            .onChange(of: project.settings.source) { _, source in
+                sourceLUT = CubeLUT.sourceTransform(for: source, bundled: bundledLUTs)
+                updateVideoComposition()
+            }
             .fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { result in
                 if case let .success(url) = result {
                     guard let lut = CubeLUT.load(url: url) else { lutLoadError = "Bu LUT dosyası okunamadı. .cube dosyasının geçerli bir 3D LUT olduğundan emin olun."; return }
@@ -339,7 +343,7 @@ struct EditorView: View {
             if isVideo, let videoPlayer { VideoPlayer(player: videoPlayer).clipShape(RoundedRectangle(cornerRadius: 18)) }
             else if isVideo { ProgressView("Video yükleniyor") }
             else if let source = library.image(for: project) {
-                let rendered = showingOriginal ? source : ImageRenderer.grade(source, settings: project.settings, lut: importedLUT)
+                let rendered = showingOriginal ? source : ImageRenderer.grade(source, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
                 Image(uiImage: rendered).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18))
                     .onLongPressGesture(minimumDuration: 0.12, pressing: { pressing in showingOriginal = pressing }, perform: {})
                     .overlay(alignment: .top) { if showingOriginal { Text("ORİJİNAL").font(.caption.bold()).padding(8).background(.black.opacity(0.7), in: Capsule()).padding(.top, 10) } }
@@ -360,6 +364,7 @@ struct EditorView: View {
     private func prepareEditor() {
         bundledLUTs = CubeLUT.loadBundled()
         if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) }
+        sourceLUT = CubeLUT.sourceTransform(for: project.settings.source, bundled: bundledLUTs)
         if bundledLUTs.isEmpty { lutLoadError = "Uygulama paketinde LUT bulunamadı. Filtre dosyaları yüklenemedi." }
         isFavorite = UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteProjects")?.contains(project.id.uuidString) ?? false
         if isVideo {
@@ -382,8 +387,9 @@ struct EditorView: View {
     private func makeVideoComposition(asset: AVAsset) -> AVVideoComposition {
         let settings = project.settings
         let lut = importedLUT
+        let profileLUT = sourceLUT
         return AVVideoComposition(asset: asset) { request in
-            let output = ImageRenderer.grade(request.sourceImage, settings: settings, lut: lut)
+            let output = ImageRenderer.grade(request.sourceImage, settings: settings, lut: lut, sourceLUT: profileLUT)
             request.finish(with: output, context: ImageRenderer.context)
         }
     }
@@ -404,7 +410,7 @@ struct EditorView: View {
     @ViewBuilder private var panel: some View {
         switch tab {
         case 0:
-            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: library.image(for: project), settings: project.settings, loadError: $lutLoadError)
+            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
         case 1:
             AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration)
         default:
@@ -414,7 +420,7 @@ struct EditorView: View {
     private func saveToPhotos() {
         if isVideo { exportTrimmedVideo(); return }
         guard let image = library.image(for: project) else { return }
-        let graded = ImageRenderer.grade(image, settings: project.settings, lut: importedLUT)
+        let graded = ImageRenderer.grade(image, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
         let output = ImageRenderer.resized(graded, resolution: project.settings.exportResolution)
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else { DispatchQueue.main.async { exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
@@ -667,6 +673,7 @@ struct FilterBrowser: View {
     @Binding var intensity: Double
     let sourceImage: UIImage?
     let settings: GradeSettings
+    let sourceLUT: CubeLUT?
     @Binding var loadError: String?
     private var visibleItems: [(String, String, URL)] { selectedCategory == "Tümü" ? items : items.filter { $0.0 == selectedCategory } }
 
@@ -687,7 +694,7 @@ struct FilterBrowser: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 10) {
                     Button { selectedLUT = nil; selectedName = "Original" } label: {
-                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, selected: selectedName == "Original")
+                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, sourceLUT: sourceLUT, selected: selectedName == "Original")
                     }.buttonStyle(.plain)
                     ForEach(Array(visibleItems.enumerated()), id: \.offset) { pair in
                         let item = pair.element
@@ -699,7 +706,7 @@ struct FilterBrowser: View {
                             selectedLUT = lut
                             selectedName = item.1
                         } label: {
-                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), selected: selectedName == item.1)
+                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), sourceLUT: sourceLUT, selected: selectedName == item.1)
                         }.buttonStyle(.plain)
                     }
                 }
@@ -716,12 +723,13 @@ struct LUTTile: View {
     let sourceImage: UIImage?
     let settings: GradeSettings
     let lut: CubeLUT?
+    let sourceLUT: CubeLUT?
     let selected: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Group {
                 if let sourceImage {
-                    Image(uiImage: ImageRenderer.thumbnail(sourceImage, settings: settings, lut: lut)).resizable().scaledToFill()
+                    Image(uiImage: ImageRenderer.thumbnail(sourceImage, settings: settings, lut: lut, sourceLUT: sourceLUT)).resizable().scaledToFill()
                 } else {
                     LinearGradient(colors: [.purple, .orange, accent], startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
@@ -757,6 +765,18 @@ struct SettingsView: View {
 }
 
 struct CubeLUT { let dimension: Int; let values: [Float]
+    static func sourceTransform(for profile: String, bundled: [(String, String, URL)]) -> CubeLUT? {
+        let lutName: String
+        switch profile {
+        case "D-Log M": lutName = "D-LogM"
+        case "Ace Pro 2 (I-Log)": lutName = "AcePro2_I-Log"
+        case "Apple Log 2": lutName = "AppleLog2"
+        case "Apple Log": lutName = "AppleLog"
+        default: return nil
+        }
+        guard let match = bundled.first(where: { $0.1 == lutName }) else { return nil }
+        return load(url: match.2)
+    }
     static func loadBundled() -> [(String, String, URL)] {
         guard let root = Bundle.main.resourceURL?.appendingPathComponent("LUTs", isDirectory: true),
               let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
@@ -816,58 +836,38 @@ enum ImageRenderer { static let context = CIContext()
             image.draw(in: CGRect(origin: .zero, size: target))
         }
     }
-    static func thumbnail(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?) -> UIImage {
+    static func thumbnail(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?, sourceLUT: CubeLUT? = nil) -> UIImage {
         let target = CGSize(width: 180, height: 112)
         let renderer = UIGraphicsImageRenderer(size: target)
         let small = renderer.image { _ in source.draw(in: CGRect(origin: .zero, size: target)) }
-        return grade(small, settings: settings, lut: lut)
+        return grade(small, settings: settings, lut: lut, sourceLUT: sourceLUT)
     }
     static func rgbaData(from rgb: [Float], dimension: Int) -> Data {
-        // .cube files enumerate blue fastest; CIColorCube needs red fastest.
+        // Resolve .cube data already varies red fastest, as CIColorCube expects.
         var rgba = [Float](repeating: 1, count: dimension * dimension * dimension * 4)
-        for blue in 0..<dimension {
-            for green in 0..<dimension {
-                for red in 0..<dimension {
-                    let source = ((red * dimension + green) * dimension + blue) * 3
-                    let target = ((blue * dimension + green) * dimension + red) * 4
-                    rgba[target] = rgb[source]
-                    rgba[target + 1] = rgb[source + 1]
-                    rgba[target + 2] = rgb[source + 2]
-                    rgba[target + 3] = 1
-                }
-            }
+        for index in 0..<(dimension * dimension * dimension) {
+            let source = index * 3
+            let target = index * 4
+            rgba[target] = rgb[source]
+            rgba[target + 1] = rgb[source + 1]
+            rgba[target + 2] = rgb[source + 2]
+            rgba[target + 3] = 1
         }
         return rgba.withUnsafeBufferPointer { Data(bytes: $0.baseAddress!, count: $0.count * MemoryLayout<Float>.size) }
     }
-    static func grade(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?) -> UIImage {
+    static func grade(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?, sourceLUT: CubeLUT? = nil) -> UIImage {
         guard let input = CIImage(image: source) else { return source }
-        let image = grade(input, settings: settings, lut: lut)
+        let image = grade(input, settings: settings, lut: lut, sourceLUT: sourceLUT)
         guard let cg = context.createCGImage(image, from: image.extent) else { return source }
         return UIImage(cgImage: cg, scale: source.scale, orientation: source.imageOrientation)
     }
-    static func grade(_ source: CIImage, settings: GradeSettings, lut: CubeLUT?) -> CIImage {
+    static func grade(_ source: CIImage, settings: GradeSettings, lut: CubeLUT?, sourceLUT: CubeLUT? = nil) -> CIImage {
         var image = source
         image = crop(image, aspect: settings.cropAspect)
 
-        // Apply the selected filter first so finishing adjustments remain visible over it.
-        if let lut {
-            let cube = CIFilter.colorCube()
-            cube.inputImage = image
-            cube.cubeDimension = Float(lut.dimension)
-            cube.cubeData = rgbaData(from: lut.values, dimension: lut.dimension)
-            if let graded = cube.outputImage {
-                if settings.intensity < 100 {
-                    let blend = CIFilter.blendWithMask()
-                    blend.inputImage = graded
-                    blend.backgroundImage = image
-                    let opacity = CGFloat(min(100, max(0, settings.intensity)) / 100)
-                    blend.maskImage = CIImage(color: CIColor(red: opacity, green: opacity, blue: opacity)).cropped(to: image.extent)
-                    image = blend.outputImage ?? graded
-                } else {
-                    image = graded
-                }
-            }
-        }
+        if let sourceLUT { image = apply(sourceLUT, to: image, intensity: 1) }
+
+        if let lut { image = apply(lut, to: image, intensity: min(1, max(0, settings.intensity / 100))) }
 
         let controls = CIFilter.colorControls()
         controls.inputImage = image
@@ -979,6 +979,21 @@ enum ImageRenderer { static let context = CIContext()
             }
         }
         return image
+    }
+
+    private static func apply(_ lut: CubeLUT, to image: CIImage, intensity: Double) -> CIImage {
+        let cube = CIFilter.colorCube()
+        cube.inputImage = image
+        cube.cubeDimension = Float(lut.dimension)
+        cube.cubeData = rgbaData(from: lut.values, dimension: lut.dimension)
+        guard let graded = cube.outputImage else { return image }
+        guard intensity < 1 else { return graded }
+        let blend = CIFilter.blendWithMask()
+        blend.inputImage = graded
+        blend.backgroundImage = image
+        let opacity = CGFloat(intensity)
+        blend.maskImage = CIImage(color: CIColor(red: opacity, green: opacity, blue: opacity)).cropped(to: image.extent)
+        return blend.outputImage ?? image
     }
 
     private static func crop(_ image: CIImage, aspect: String) -> CIImage {
