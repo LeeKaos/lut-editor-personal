@@ -1,13 +1,26 @@
-name: iOS build
+name: Build LumaGrade IPA
 
 on:
   push:
-  pull_request:
+    branches: [codex/lumagrade-build]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Build unsigned simulator app
-        run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+      - name: Build unsigned iPhone app
+        run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p package/Payload
+          cp -R build/Build/Products/Release-iphoneos/LumaGrade.app package/Payload/
+          cd package
+          /usr/bin/zip -qry ../LumaGrade-unsigned.ipa Payload
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumaGrade-unsigned-ipa
+          path: LumaGrade-unsigned.ipa
+          if-no-files-found: error
