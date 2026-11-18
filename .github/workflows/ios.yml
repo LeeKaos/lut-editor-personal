@@ -16,11 +16,13 @@ jobs:
         run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
       - name: Verify iPhone app package metadata
         run: |
+          set -euxo pipefail
           APP_PATH="build/Build/Products/Release-iphoneos/LumaGrade.app"
           test -s "$APP_PATH/Assets.car"
           plutil -lint "$APP_PATH/Info.plist"
           test -d "$APP_PATH/LUTs"
           LUT_COUNT=$(find "$APP_PATH/LUTs" -type f -name '*.lutf' | wc -l | tr -d ' ')
+          echo "Bundled LUT count: $LUT_COUNT"
           test "$LUT_COUNT" -eq 100
           ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/LumaGrade")
           [[ " $ARCHS " == *" arm64 "* ]]
