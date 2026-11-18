@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 import Photos
 import UIKit
 import AVFoundation
+import ImageIO
 
 private let accent = Color(red: 0.66, green: 1.0, blue: 0.16)
 
@@ -46,8 +47,8 @@ final class ProjectLibrary: ObservableObject {
     @Published var projects: [GradeProject] = [] { didSet { save() } }
     private let key = "lumagrade.projects.v1"
     init() { guard let data = UserDefaults.standard.data(forKey: key), let stored = try? JSONDecoder().decode([GradeProject].self, from: data) else { return }; projects = stored }
-    func add(image: UIImage) -> GradeProject? { guard let data = image.jpegData(compressionQuality: 0.96) else { return nil }; let name = "\(UUID().uuidString).jpg"; let url = documents.appendingPathComponent(name); do { try data.write(to: url, options: .atomic); let project = GradeProject(fileName: name); projects.insert(project, at: 0); return project } catch { return nil } }
-    func add(video source: URL) -> GradeProject? { let ext = source.pathExtension.isEmpty ? "mov" : source.pathExtension; let name = "\(UUID().uuidString).\(ext)"; let destination = documents.appendingPathComponent(name); do { try FileManager.default.copyItem(at: source, to: destination); let project = GradeProject(fileName: name); projects.insert(project, at: 0); return project } catch { return nil } }
+    func add(image: UIImage, source: String = "Regular") -> GradeProject? { guard let data = image.jpegData(compressionQuality: 0.96) else { return nil }; let name = "\(UUID().uuidString).jpg"; let url = documents.appendingPathComponent(name); do { try data.write(to: url, options: .atomic); var settings = GradeSettings(); settings.source = source; let project = GradeProject(fileName: name, settings: settings); projects.insert(project, at: 0); return project } catch { return nil } }
+    func add(video source: URL, profile: String = "Regular") -> GradeProject? { let ext = source.pathExtension.isEmpty ? "mov" : source.pathExtension; let name = "\(UUID().uuidString).\(ext)"; let destination = documents.appendingPathComponent(name); do { try FileManager.default.copyItem(at: source, to: destination); var settings = GradeSettings(); settings.source = profile; let project = GradeProject(fileName: name, settings: settings); projects.insert(project, at: 0); return project } catch { return nil } }
     func videoURL(for project: GradeProject) -> URL { documents.appendingPathComponent(project.fileName) }
     func image(for project: GradeProject) -> UIImage? { UIImage(contentsOfFile: documents.appendingPathComponent(project.fileName).path) }
     func update(_ project: GradeProject) { guard let index = projects.firstIndex(where: { $0.id == project.id }) else { return }; projects[index] = project }
@@ -70,8 +71,8 @@ struct ProjectsView: View {
         }.confirmationDialog("Yeni Proje", isPresented: $choosingMedia, titleVisibility: .visible) { PhotosPicker(selection: $pickerItem, matching: .images) { Label("Fotoğraf Seç", systemImage: "photo") }; PhotosPicker(selection: $videoItem, matching: .videos) { Label("Video Seç", systemImage: "video") } }.onChange(of: pickerItem) { _, item in importImage(item) }.onChange(of: videoItem) { _, item in importVideo(item) }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { _ in }.fullScreenCover(item: $editor) { EditorView(project: $0) } }
     private var empty: some View { ContentUnavailableView("İlk düzenlemeni oluştur", systemImage: "camera.filters", description: Text("Fotoğraf seç, LUT uygula ve görünümünü kaydet.")) }
     private func card(_ project: GradeProject) -> some View { Button { editor = project } label: { VStack(alignment: .leading, spacing: 7) { Group { if let image = library.image(for: project) { Image(uiImage: image).resizable().scaledToFill() } else { Color.gray } }.frame(height: 126).clipShape(RoundedRectangle(cornerRadius: 14)); Text(project.settings.lutName).font(.caption.weight(.semibold)).lineLimit(1); Text(project.createdAt, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.secondary) }.contentShape(Rectangle()) }.buttonStyle(.plain).contextMenu { Button(role: .destructive) { library.remove(project) } label: { Label("Delete", systemImage: "trash") } } }
-    private func importImage(_ item: PhotosPickerItem?) { Task { guard let data = try? await item?.loadTransferable(type: Data.self), let image = UIImage(data: data), let project = library.add(image: image) else { return }; await MainActor.run { editor = project; pickerItem = nil } } }
-    private func importVideo(_ item: PhotosPickerItem?) { Task { guard let movie = try? await item?.loadTransferable(type: PickedMovie.self), let project = library.add(video: movie.url) else { return }; await MainActor.run { editor = project; videoItem = nil } } }
+    private func importImage(_ item: PhotosPickerItem?) { Task { guard let data = try? await item?.loadTransferable(type: Data.self), let image = UIImage(data: data), let project = library.add(image: image, source: SourceDetector.fromImage(data)) else { return }; await MainActor.run { editor = project; pickerItem = nil } } }
+    private func importVideo(_ item: PhotosPickerItem?) { Task { guard let movie = try? await item?.loadTransferable(type: PickedMovie.self), let project = library.add(video: movie.url, profile: SourceDetector.fromVideo(movie.url)) else { return }; await MainActor.run { editor = project; videoItem = nil } } }
 }
 
 struct PickedMovie: Transferable {
@@ -87,6 +88,30 @@ struct PickedMovie: Transferable {
     }
 }
 
+enum SourceDetector {
+    static let profiles = ["Regular", "D-Log M", "Ace Pro 2 (I-Log)", "Apple Log 2", "Apple Log"]
+    private static func profile(from value: String) -> String {
+        let s = value.lowercased().replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
+        if s.contains("d log m") || s.contains("dlogm") { return "D-Log M" }
+        if s.contains("ace pro 2") || (s.contains("insta360") && s.contains("i log")) { return "Ace Pro 2 (I-Log)" }
+        if s.contains("apple log 2") || s.contains("applelog2") { return "Apple Log 2" }
+        if s.contains("apple log") || s.contains("applelog") { return "Apple Log" }
+        return "Regular"
+    }
+    static func fromImage(_ data: Data) -> String {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else { return "Regular" }
+        let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+        let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        return profile(from: "\(tiff[kCGImagePropertyTIFFModel] ?? "") \(tiff[kCGImagePropertyTIFFSoftware] ?? "") \(exif[kCGImagePropertyExifUserComment] ?? "")")
+    }
+    static func fromVideo(_ url: URL) -> String {
+        let asset = AVURLAsset(url: url)
+        let text = asset.commonMetadata.compactMap(\.stringValue).joined(separator: " ")
+        return profile(from: text)
+    }
+}
+
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
     @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var bundledLUTs: [(String, URL)] = []; @State private var importing = false; @State private var showShare = false
@@ -98,7 +123,23 @@ struct EditorView: View {
 }
 
 struct SliderPanel: View { @Binding var settings: GradeSettings; let labels: [(String, WritableKeyPath<GradeSettings, Double>, ClosedRange<Double>)]
-    var body: some View { ScrollView(.horizontal, showsIndicators: false) { HStack(alignment: .top, spacing: 18) { ForEach(labels.indices, id: \.self) { index in let item = labels[index]; VStack(alignment: .leading) { Text(item.0).font(.caption); Slider(value: Binding(get: { settings[keyPath: item.1] }, set: { settings[keyPath: item.1] = $0 }), in: item.2).frame(width: 160); Text(settings[keyPath: item.1], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) } } }.padding(.vertical, 4) } }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack { Text("Kaynak profili"); Spacer(); Picker("Kaynak profili", selection: $settings.source) { ForEach(SourceDetector.profiles, id: \.self) { Text($0).tag($0) } }.labelsHidden() }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 18) {
+                    ForEach(labels.indices, id: \.self) { index in
+                        let item = labels[index]
+                        VStack(alignment: .leading) {
+                            Text(item.0).font(.caption)
+                            Slider(value: Binding(get: { settings[keyPath: item.1] }, set: { settings[keyPath: item.1] = $0 }), in: item.2).frame(width: 160)
+                            Text(settings[keyPath: item.1], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }.padding(.vertical, 4)
+            }
+        }
+    }
 }
 
 struct SettingsView: View {
