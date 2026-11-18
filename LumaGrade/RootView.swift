@@ -114,11 +114,22 @@ enum SourceDetector {
 
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
-    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var bundledLUTs: [(String, URL)] = []; @State private var importing = false; @State private var showShare = false
+    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Tümü"; @State private var importing = false; @State private var showShare = false
+    private var lutCategories: [String] { ["Tümü"] + Array(Set(bundledLUTs.map { $0.0 })).sorted() }
+    private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
     init(project: GradeProject) { _project = State(initialValue: project) }
-    var body: some View { NavigationStack { VStack(spacing: 0) { GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }.padding(.horizontal, 12); Picker("Düzenleme", selection: $tab) { Text("Filtreler").tag(0); Text("Ayarla").tag(1); Text("Efektler").tag(2) }.pickerStyle(.segmented).padding(); panel.padding(.horizontal).padding(.bottom, 8) }.background(Color.black).navigationTitle(project.settings.lutName).navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Kapat") { library.update(project); dismiss() } }; ToolbarItemGroup(placement: .topBarTrailing) { Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }; Button { saveToPhotos() } label: { Image(systemName: "square.and.arrow.up") } } }.onAppear { bundledLUTs = CubeLUT.loadBundled(); if let match = bundledLUTs.first(where: { $0.0 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.1) } }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { result in if case let .success(url) = result { importedLUT = CubeLUT.load(url: url); project.settings.lutName = url.deletingPathExtension().lastPathComponent } } } }
+    var body: some View { NavigationStack { VStack(spacing: 0) { GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }.padding(.horizontal, 12); Picker("Düzenleme", selection: $tab) { Text("Filtreler").tag(0); Text("Ayarla").tag(1); Text("Efektler").tag(2) }.pickerStyle(.segmented).padding(); panel.padding(.horizontal).padding(.bottom, 8) }.background(Color.black).navigationTitle(project.settings.lutName).navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Kapat") { library.update(project); dismiss() } }; ToolbarItemGroup(placement: .topBarTrailing) { Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }; Button { saveToPhotos() } label: { Image(systemName: "square.and.arrow.up") } } }.onAppear { bundledLUTs = CubeLUT.loadBundled(); if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) } }.fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { result in if case let .success(url) = result { importedLUT = CubeLUT.load(url: url); project.settings.lutName = url.deletingPathExtension().lastPathComponent } } } }
     private var preview: some View { Group { if let source = library.image(for: project) { Image(uiImage: ImageRenderer.grade(source, settings: project.settings, lut: importedLUT)).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18)) } else { ContentUnavailableView("Original missing", systemImage: "exclamationmark.triangle") } } }
-    @ViewBuilder private var panel: some View { switch tab { case 0: VStack(spacing: 10) { HStack { Text(importedLUT == nil ? "Görünümler" : "Özel LUT"); Spacer(); Text("\(Int(project.settings.intensity))%") }; ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 10) { Button("Orijinal") { importedLUT = nil; project.settings.lutName = "Original" }.buttonStyle(.bordered); ForEach(bundledLUTs.indices, id: \.self) { index in let item = bundledLUTs[index]; Button(item.0) { importedLUT = CubeLUT.load(url: item.1); project.settings.lutName = item.0 }.buttonStyle(.bordered) } }.font(.caption) }; Slider(value: $project.settings.intensity, in: 0...100); Text("100 LUT hazır · İndirme düğmesinden .cube dosyası ekleyin.").font(.caption).foregroundStyle(.secondary) }; case 1: SliderPanel(settings: $project.settings, labels: [("Pozlama", \GradeSettings.exposure, -2...2), ("Kontrast", \GradeSettings.contrast, 0...2), ("Doygunluk", \GradeSettings.saturation, 0...2), ("Parlaklık", \GradeSettings.brightness, -0.25...0.25), ("Açık Alanlar", \GradeSettings.highlights, 0...2), ("Gölgeler", \GradeSettings.shadows, -1...1)]); default: SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)]) } }
+    @ViewBuilder private var panel: some View {
+        switch tab {
+        case 0:
+            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: library.image(for: project), settings: project.settings)
+        case 1:
+            SliderPanel(settings: $project.settings, labels: [("Pozlama", \GradeSettings.exposure, -2...2), ("Kontrast", \GradeSettings.contrast, 0...2), ("Doygunluk", \GradeSettings.saturation, 0...2), ("Parlaklık", \GradeSettings.brightness, -0.25...0.25), ("Açık Alanlar", \GradeSettings.highlights, 0...2), ("Gölgeler", \GradeSettings.shadows, -1...1)])
+        default:
+            SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
+        }
+    }
     private func saveToPhotos() { guard let image = library.image(for: project) else { return }; let output = ImageRenderer.grade(image, settings: project.settings, lut: importedLUT); PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in guard status == .authorized || status == .limited else { return }; PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } } }
 }
 
@@ -139,6 +150,75 @@ struct SliderPanel: View { @Binding var settings: GradeSettings; let labels: [(S
                 }.padding(.vertical, 4)
             }
         }
+    }
+}
+
+struct FilterBrowser: View {
+    let items: [(String, String, URL)]
+    let categories: [String]
+    @Binding var selectedCategory: String
+    @Binding var selectedName: String
+    @Binding var selectedLUT: CubeLUT?
+    @Binding var intensity: Double
+    let sourceImage: UIImage?
+    let settings: GradeSettings
+    private var visibleItems: [(String, String, URL)] { selectedCategory == "Tümü" ? items : items.filter { $0.0 == selectedCategory } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack { Text("Filtreler").font(.headline); Spacer(); Text("Yoğunluk  \(Int(intensity))% ").font(.caption).foregroundStyle(.secondary) }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(categories, id: \.self) { name in
+                        Button(name) { selectedCategory = name }
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(selectedCategory == name ? accent : Color.white.opacity(0.08), in: Capsule())
+                            .foregroundStyle(selectedCategory == name ? .black : .white)
+                    }
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 10) {
+                    Button { selectedLUT = nil; selectedName = "Original" } label: {
+                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, selected: selectedName == "Original")
+                    }.buttonStyle(.plain)
+                    ForEach(Array(visibleItems.enumerated()), id: \.offset) { pair in
+                        let item = pair.element
+                        Button { selectedLUT = CubeLUT.load(url: item.2); selectedName = item.1 } label: {
+                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), selected: selectedName == item.1)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+            Slider(value: $intensity, in: 0...100)
+                .tint(accent)
+                .disabled(selectedLUT == nil)
+        }
+    }
+}
+
+struct LUTTile: View {
+    let name: String
+    let sourceImage: UIImage?
+    let settings: GradeSettings
+    let lut: CubeLUT?
+    let selected: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Group {
+                if let sourceImage {
+                    Image(uiImage: ImageRenderer.thumbnail(sourceImage, settings: settings, lut: lut)).resizable().scaledToFill()
+                } else {
+                    LinearGradient(colors: [.purple, .orange, accent], startPoint: .topLeading, endPoint: .bottomTrailing)
+                }
+            }
+            .frame(width: 92, height: 58).clipped().clipShape(RoundedRectangle(cornerRadius: 8))
+            Text(name).font(.caption2).lineLimit(1).frame(width: 92, alignment: .leading)
+        }
+        .padding(5)
+        .background(selected ? accent.opacity(0.2) : Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11))
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(selected ? accent : .clear, lineWidth: 1.5))
     }
 }
 
@@ -164,18 +244,26 @@ struct SettingsView: View {
 }
 
 struct CubeLUT { let dimension: Int; let values: [Float]
-    static func loadBundled() -> [(String, URL)] {
+    static func loadBundled() -> [(String, String, URL)] {
         guard let root = Bundle.main.resourceURL?.appendingPathComponent("LUTs", isDirectory: true),
               let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
-        return files.compactMap { item -> (String, URL)? in
+        return files.compactMap { item -> (String, String, URL)? in
             guard let url = item as? URL, url.pathExtension.lowercased() == "cube" else { return nil }
-            return (url.deletingPathExtension().lastPathComponent, url)
-        }.sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
+            let parent = url.deletingLastPathComponent().lastPathComponent
+            let category = parent == "LUTs" ? "Kamera" : parent
+            return (category, url.deletingPathExtension().lastPathComponent, url)
+        }.sorted { $0.1.localizedCaseInsensitiveCompare($1.1) == .orderedAscending }
     }
     static func load(url: URL) -> CubeLUT? { let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }; guard let text = try? String(contentsOf: url) else { return nil }; var size: Int?; var values: [Float] = []; for raw in text.components(separatedBy: .newlines) { let line = raw.trimmingCharacters(in: .whitespaces); if line.hasPrefix("LUT_3D_SIZE") { size = Int(line.split(separator: " ").last ?? "") }; let numbers = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap { Float($0) }; if numbers.count == 3 { values.append(contentsOf: numbers) } }; guard let dimension = size, values.count == dimension * dimension * dimension * 3 else { return nil }; return CubeLUT(dimension: dimension, values: values) }
 }
 
 enum ImageRenderer { static let context = CIContext()
+    static func thumbnail(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?) -> UIImage {
+        let target = CGSize(width: 180, height: 112)
+        let renderer = UIGraphicsImageRenderer(size: target)
+        let small = renderer.image { _ in source.draw(in: CGRect(origin: .zero, size: target)) }
+        return grade(small, settings: settings, lut: lut)
+    }
     static func rgbaData(from rgb: [Float]) -> Data {
         var rgba = [Float](); rgba.reserveCapacity(rgb.count / 3 * 4)
         for index in stride(from: 0, to: rgb.count, by: 3) { rgba.append(rgb[index]); rgba.append(rgb[index + 1]); rgba.append(rgb[index + 2]); rgba.append(1) }
