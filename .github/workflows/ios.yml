@@ -14,12 +14,19 @@ jobs:
         run: python3 Scripts/prepare_luts.py
       - name: Build unsigned iPhone app
         run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Verify iPhone app package metadata
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/LumaGrade.app"
+          test -s "$APP_PATH/Assets.car"
+          plutil -lint "$APP_PATH/Info.plist"
+          /usr/bin/lipo -verify_arch arm64 "$APP_PATH/LumaGrade"
       - name: Package unsigned IPA
         run: |
           mkdir -p package/Payload
           cp -R build/Build/Products/Release-iphoneos/LumaGrade.app package/Payload/
           cd package
           /usr/bin/zip -qry ../LumaGrade-unsigned.ipa Payload
+          /usr/bin/unzip -tq ../LumaGrade-unsigned.ipa
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:

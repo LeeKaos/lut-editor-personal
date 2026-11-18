@@ -4,6 +4,7 @@
   A001 /* LumaGradeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A101; };
   A002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102; };
   A003 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = A106; };
+  A004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A107; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
   A101 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaGradeApp.swift; sourceTree = "<group>"; };
@@ -12,10 +13,11 @@
   A104 = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumaGrade.entitlements; sourceTree = "<group>"; };
   A105 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LumaGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
   A106 = {isa = PBXFileReference; lastKnownFileType = folder; path = LUTs; sourceTree = "<group>"; };
+  A107 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXGroup section */
   A201 = {isa = PBXGroup; children = (A202, A203); sourceTree = "<group>"; };
-  A202 = {isa = PBXGroup; children = (A101, A102, A103, A104, A106); path = LumaGrade; sourceTree = "<group>"; };
+  A202 = {isa = PBXGroup; children = (A101, A102, A103, A104, A106, A107); path = LumaGrade; sourceTree = "<group>"; };
   A203 = {isa = PBXGroup; children = (A105); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
@@ -25,7 +27,7 @@
   A601 = {isa = PBXProject; attributes = { LastUpgradeCheck = 1500; TargetAttributes = { A301 = { CreatedOnToolsVersion = 15.0; }; }; }; buildConfigurationList = A402; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A201; productRefGroup = A203; projectDirPath = ""; projectRoot = ""; targets = (A301); };
 /* End PBXProject section */
 /* Begin PBXResourcesBuildPhase section */
-  A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A003); runOnlyForDeploymentPostprocessing = 0; };
+  A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A003, A004); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
   A502 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A001, A002); runOnlyForDeploymentPostprocessing = 0; };
@@ -36,8 +38,8 @@
 /* Begin XCBuildConfiguration section */
   A701 = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; }; name = Debug; };
   A702 = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; }; name = Release; };
-  A703 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
-  A704 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+  A703 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 2; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.0.1; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+  A704 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 2; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.0.1; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
   A401 = {isa = XCConfigurationList; buildConfigurations = (A703, A704); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
