@@ -19,7 +19,8 @@ jobs:
           APP_PATH="build/Build/Products/Release-iphoneos/LumaGrade.app"
           test -s "$APP_PATH/Assets.car"
           plutil -lint "$APP_PATH/Info.plist"
-          /usr/bin/lipo -verify_arch arm64 "$APP_PATH/LumaGrade"
+          ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/LumaGrade")
+          [[ " $ARCHS " == *" arm64 "* ]]
       - name: Package unsigned IPA
         run: |
           mkdir -p package/Payload
