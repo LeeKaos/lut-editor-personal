@@ -28,8 +28,9 @@ struct GradeSettings: Codable, Equatable {
     var trimStart = 0.0; var trimEnd = 1.0
     var exportCodec = "HEVC"; var exportResolution = "Orijinal"; var exportBitrateMode = "Otomatik"; var exportBitrateMbps = 20.0
     var vignette = 0.0; var bloom = 0.0; var grain = 0.0
+    var brilliance = 0.0; var blackPoint = 0.0; var definition = 0.0; var noiseReduction = 0.0; var autoEnhance = false
     var source = "Regular"
-    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, exportCodec, exportResolution, exportBitrateMode, exportBitrateMbps, vignette, bloom, grain, source }
+    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, exportCodec, exportResolution, exportBitrateMode, exportBitrateMbps, vignette, bloom, grain, brilliance, blackPoint, definition, noiseReduction, autoEnhance, source }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -68,6 +69,11 @@ struct GradeSettings: Codable, Equatable {
         vignette = try c.decodeIfPresent(Double.self, forKey: .vignette) ?? 0
         bloom = try c.decodeIfPresent(Double.self, forKey: .bloom) ?? 0
         grain = try c.decodeIfPresent(Double.self, forKey: .grain) ?? 0
+        brilliance = try c.decodeIfPresent(Double.self, forKey: .brilliance) ?? 0
+        blackPoint = try c.decodeIfPresent(Double.self, forKey: .blackPoint) ?? 0
+        definition = try c.decodeIfPresent(Double.self, forKey: .definition) ?? 0
+        noiseReduction = try c.decodeIfPresent(Double.self, forKey: .noiseReduction) ?? 0
+        autoEnhance = try c.decodeIfPresent(Bool.self, forKey: .autoEnhance) ?? false
         source = try c.decodeIfPresent(String.self, forKey: .source) ?? "Regular"
     }
 }
@@ -183,15 +189,8 @@ struct ProjectsView: View {
         return Button { editor = project } label: {
             VStack(alignment: .leading, spacing: 7) {
                 ZStack(alignment: .bottomLeading) {
-                    Group {
-                        if !isVideo, let image = library.image(for: project) {
-                            Image(uiImage: image).resizable().scaledToFill()
-                        } else {
-                            Rectangle().fill(Color.white.opacity(0.06))
-                                .overlay(Image(systemName: isVideo ? "film" : "photo").font(.system(size: 24, weight: .light)).foregroundStyle(accent.opacity(0.8)))
-                        }
-                    }
-                    .frame(height: 126).frame(maxWidth: .infinity).clipped()
+                    MediaProjectThumbnail(url: library.videoURL(for: project), isVideo: isVideo)
+                        .frame(height: 126).frame(maxWidth: .infinity).clipped()
                     LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .center, endPoint: .bottom)
                     Label(isVideo ? "VİDEO" : "FOTOĞRAF", systemImage: isVideo ? "play.fill" : "photo")
                         .font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
@@ -236,7 +235,8 @@ struct ProjectsView: View {
             do {
                 let movie = try await item.loadTransferable(type: PickedMovie.self)
                 guard let movie else { throw MediaImportError.videoDataUnavailable }
-                let project = try library.add(video: movie.url, profile: SourceDetector.fromVideo(movie.url))
+                let sourceProfile = await SourceDetector.fromVideo(movie.url)
+                let project = try library.add(video: movie.url, profile: sourceProfile)
                 editor = project
             } catch {
                 importError = "Video alınamadı: \(error.localizedDescription)"
@@ -272,9 +272,17 @@ struct PickedMovie: Transferable {
 }
 
 enum SourceDetector {
-    static let profiles = ["Regular", "D-Log M", "Ace Pro 2 (I-Log)", "Apple Log 2", "Apple Log"]
+    static let profiles = ["Regular", "Sony S-Log3 Cine", "Sony S-Log2", "OSMO Pocket 4 Pro (D-Log2)", "OSMO Pocket 4 Pro (D-Log)", "OSMO Pocket 4 (D-Log)", "D-Log M", "DJI Mini 4 Pro (D-Log M)", "Ace Pro 2 (I-Log)", "GO Ultra (I-Log)", "Luna Ultra (I-Log)", "Apple Log 2", "Apple Log"]
     private static func profile(from value: String) -> String {
         let s = value.lowercased().replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
+        if s.contains("s log3") || s.contains("slog3") { return "Sony S-Log3 Cine" }
+        if s.contains("s log2") || s.contains("slog2") { return "Sony S-Log2" }
+        if s.contains("pocket 4p") && s.contains("d log2") { return "OSMO Pocket 4 Pro (D-Log2)" }
+        if s.contains("pocket 4p") && s.contains("d log") { return "OSMO Pocket 4 Pro (D-Log)" }
+        if s.contains("pocket 4") && s.contains("d log") { return "OSMO Pocket 4 (D-Log)" }
+        if s.contains("mini 4 pro") && (s.contains("d log m") || s.contains("dlogm")) { return "DJI Mini 4 Pro (D-Log M)" }
+        if s.contains("go ultra") && (s.contains("i log") || s.contains("ilog")) { return "GO Ultra (I-Log)" }
+        if s.contains("luna ultra") && (s.contains("i log") || s.contains("ilog")) { return "Luna Ultra (I-Log)" }
         if s.contains("d log m") || s.contains("dlogm") { return "D-Log M" }
         if s.contains("ace pro 2") || (s.contains("insta360") && s.contains("i log")) { return "Ace Pro 2 (I-Log)" }
         if s.contains("apple log 2") || s.contains("applelog2") { return "Apple Log 2" }
@@ -288,10 +296,47 @@ enum SourceDetector {
         let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
         return profile(from: "\(tiff[kCGImagePropertyTIFFModel] ?? "") \(tiff[kCGImagePropertyTIFFSoftware] ?? "") \(exif[kCGImagePropertyExifUserComment] ?? "")")
     }
-    static func fromVideo(_ url: URL) -> String {
+    static func fromVideo(_ url: URL) async -> String {
         let asset = AVURLAsset(url: url)
-        let text = asset.commonMetadata.compactMap(\.stringValue).joined(separator: " ")
+        var text = (try? await asset.load(.commonMetadata))?.compactMap(\.stringValue).joined(separator: " ") ?? ""
+        if let tracks = try? await asset.loadTracks(withMediaType: .video) {
+            for track in tracks {
+                if let descriptions = try? await track.load(.formatDescriptions) {
+                    for description in descriptions {
+                        text += " \(CMFormatDescriptionGetExtensions(description))"
+                    }
+                }
+            }
+        }
         return profile(from: text)
+    }
+}
+
+private struct MediaProjectThumbnail: View {
+    let url: URL
+    let isVideo: Bool
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Rectangle().fill(Color.white.opacity(0.06))
+                    .overlay(Image(systemName: isVideo ? "film" : "photo").font(.system(size: 24, weight: .light)).foregroundStyle(accent.opacity(0.8)))
+            }
+        }
+        .task(id: url) {
+            if !isVideo {
+                image = await Task.detached(priority: .utility) { UIImage(contentsOfFile: url.path) }.value
+                return
+            }
+            let asset = AVURLAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 480, height: 480)
+            if let (cgImage, _) = try? await generator.image(at: .zero) { image = UIImage(cgImage: cgImage) }
+        }
     }
 }
 
@@ -301,6 +346,7 @@ struct EditorView: View {
     @State private var lutLoadError: String?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
+    @State private var isExporting = false; @State private var exportProgress = 0.0
     private var isVideo: Bool { ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased()) }
     private var lutCategories: [String] { ["Tümü"] + Array(Set(bundledLUTs.map { $0.0 })).sorted() }
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
@@ -321,6 +367,23 @@ struct EditorView: View {
                 panel.padding(.horizontal).padding(.bottom, 8)
             }
             .background(Color.black)
+            .overlay {
+                if isExporting {
+                    ZStack {
+                        Color.black.opacity(0.72).ignoresSafeArea()
+                        VStack(spacing: 14) {
+                            ProgressView(value: exportProgress)
+                                .tint(accent).frame(width: 220)
+                            Text("Dışa aktarılıyor · %\(Int(exportProgress * 100))")
+                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                            Text(isVideo ? "Video hazırlanıyor, uygulamayı açık tutun." : "Fotoğraf işleniyor…")
+                                .font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
+                        }
+                        .padding(24).background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.1), lineWidth: 1))
+                    }
+                }
+            }
             .navigationTitle(project.settings.lutName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -331,8 +394,9 @@ struct EditorView: View {
                     Button { showingExportSettings = true } label: { Image(systemName: "slider.horizontal.3") }
                         .accessibilityLabel("Dışa aktarma ayarları")
                     Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }
-                    Button { saveToPhotos() } label: { Image(systemName: "square.and.arrow.up") }
+                    Button { saveToPhotos() } label: { isExporting ? ProgressView().tint(accent) : Image(systemName: "square.and.arrow.up") }
                         .accessibilityLabel("Dışa aktar")
+                        .disabled(isExporting)
                 }
             }
             .onAppear(perform: prepareEditor)
@@ -488,12 +552,20 @@ struct EditorView: View {
     private func saveToPhotos() {
         if isVideo { exportTrimmedVideo(); return }
         guard let image = library.image(for: project) else { return }
-        let graded = ImageRenderer.grade(image, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
-        let output = ImageRenderer.resized(graded, resolution: project.settings.exportResolution)
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else { DispatchQueue.main.async { exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
-            PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } completionHandler: { saved, error in
-                DispatchQueue.main.async { exportMessage = saved ? "Fotoğraf arşive kaydedildi." : (error?.localizedDescription ?? "Fotoğraf kaydedilemedi.") }
+        let settings = project.settings; let lut = importedLUT; let profileLUT = sourceLUT
+        isExporting = true; exportProgress = 0.05
+        Task { @MainActor in
+            await Task.yield()
+            let output = await Task.detached(priority: .userInitiated) {
+                let graded = ImageRenderer.grade(image, settings: settings, lut: lut, sourceLUT: profileLUT)
+                return ImageRenderer.resized(graded, resolution: settings.exportResolution)
+            }.value
+            exportProgress = 0.8
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                guard status == .authorized || status == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+                PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } completionHandler: { saved, error in
+                    DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Fotoğraf arşive kaydedildi." : (error?.localizedDescription ?? "Fotoğraf kaydedilemedi.") }
+                }
             }
         }
     }
@@ -501,6 +573,7 @@ struct EditorView: View {
         let asset = AVURLAsset(url: library.videoURL(for: project))
         Task {
             do {
+                await MainActor.run { isExporting = true; exportProgress = 0.02 }
                 let duration = CMTimeGetSeconds(try await asset.load(.duration))
                 let start = min(duration, max(0, duration * project.settings.trimStart))
                 let end = min(duration, max(start + 0.05, duration * project.settings.trimEnd))
@@ -513,19 +586,28 @@ struct EditorView: View {
                 session.videoComposition = makeVideoComposition(asset: asset)
                 session.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600), duration: CMTime(seconds: end - start, preferredTimescale: 600))
                 let bitrate = effectiveBitrateMbps
-                session.fileLengthLimit = Int64((end - start) * bitrate * 1_000_000 / 8)
+                if project.settings.exportBitrateMode == "El ile", project.settings.exportCodec != "ProRes" {
+                    session.fileLengthLimit = Int64((end - start) * bitrate * 1_000_000 / 8 * 1.08)
+                }
+                let progressTask = Task { @MainActor in
+                    while ![AVAssetExportSession.Status.completed, .failed, .cancelled].contains(session.status) {
+                        exportProgress = max(exportProgress, Double(session.progress) * 0.94)
+                        try? await Task.sleep(for: .milliseconds(180))
+                    }
+                }
                 let status: AVAssetExportSession.Status = await withCheckedContinuation { continuation in
                     session.exportAsynchronously { continuation.resume(returning: session.status) }
                 }
+                progressTask.cancel()
                 guard status == .completed else { throw session.error ?? CocoaError(.fileWriteUnknown) }
                 PHPhotoLibrary.requestAuthorization(for: .addOnly) { authorization in
-                    guard authorization == .authorized || authorization == .limited else { DispatchQueue.main.async { exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+                    guard authorization == .authorized || authorization == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
                     PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: output) } completionHandler: { saved, error in
                         try? FileManager.default.removeItem(at: output)
-                        DispatchQueue.main.async { exportMessage = saved ? "Düzenlenmiş video arşive kaydedildi." : (error?.localizedDescription ?? "Video kaydedilemedi.") }
+                        DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Düzenlenmiş video arşive kaydedildi." : (error?.localizedDescription ?? "Video kaydedilemedi.") }
                     }
                 }
-            } catch { await MainActor.run { exportMessage = error.localizedDescription } }
+            } catch { await MainActor.run { isExporting = false; exportProgress = 0; exportMessage = error.localizedDescription } }
         }
     }
     private var effectiveBitrateMbps: Double {
@@ -649,17 +731,20 @@ struct ExportSettingsView: View {
 }
 
 private enum AdjustmentControl: String, CaseIterable, Identifiable {
-    case exposure = "Pozlama", shadows = "Gölgeler", highlights = "Açık alanlar", whites = "Beyazlar", blacks = "Siyahlar"
+    case auto = "Otomatik", brilliance = "Pırıldama", exposure = "Pozlama", shadows = "Gölgeler", highlights = "Açık alanlar", whites = "Beyazlar", blacks = "Siyahlar", blackPoint = "Siyah noktası"
     case temperature = "Sıcaklık", tint = "Tint", contrast = "Kontrast", hue = "Hue", lightness = "HLS Açıklık"
-    case vibrance = "Canlılık", saturation = "Doygunluk", sharpness = "Keskinlik", vignette = "Vinyet"
+    case vibrance = "Canlılık", saturation = "Doygunluk", sharpness = "Keskinlik", definition = "Tanım", noiseReduction = "Gürültü azaltma", vignette = "Vinyet"
     var id: String { rawValue }
     var symbol: String {
         switch self {
+        case .auto: return "wand.and.stars"
+        case .brilliance: return "sparkles"
         case .exposure: return "sun.max"
         case .shadows: return "moon"
         case .highlights: return "sun.max.fill"
         case .whites: return "circle.lefthalf.filled"
         case .blacks: return "circle.lefthalf.striped.horizontal"
+        case .blackPoint: return "circle.bottomhalf.filled"
         case .temperature: return "thermometer.medium"
         case .tint: return "drop.halffull"
         case .contrast: return "circle.lefthalf.filled"
@@ -668,16 +753,21 @@ private enum AdjustmentControl: String, CaseIterable, Identifiable {
         case .vibrance: return "sparkles"
         case .saturation: return "drop.fill"
         case .sharpness: return "triangle"
+        case .definition: return "viewfinder"
+        case .noiseReduction: return "circle.dotted"
         case .vignette: return "viewfinder"
         }
     }
     var keyPath: WritableKeyPath<GradeSettings, Double>? {
         switch self {
+        case .auto: return nil
+        case .brilliance: return \.brilliance
         case .exposure: return \.exposure
         case .shadows: return \.shadows
         case .highlights: return \.highlights
         case .whites: return \.whites
         case .blacks: return \.blacks
+        case .blackPoint: return \.blackPoint
         case .temperature: return \.temperature
         case .tint: return \.tint
         case .contrast: return \.contrast
@@ -686,25 +776,31 @@ private enum AdjustmentControl: String, CaseIterable, Identifiable {
         case .vibrance: return \.vibrance
         case .saturation: return \.saturation
         case .sharpness: return \.sharpness
+        case .definition: return \.definition
+        case .noiseReduction: return \.noiseReduction
         case .vignette: return \.vignette
         }
     }
     var range: ClosedRange<Double> {
         switch self {
+        case .auto: return 0...1
+        case .brilliance: return -1...1
         case .exposure: return -4...4
         case .shadows: return -1...1
         case .highlights: return 0...2
         case .whites, .blacks, .vibrance: return -1...1
+        case .blackPoint: return -1...1
         case .temperature: return 2000...12000
         case .tint: return -100...100
         case .contrast, .saturation: return 0...2
         case .hue: return -180...180
         case .lightness: return -0.5...0.5
-        case .sharpness, .vignette: return 0...2
+        case .sharpness, .definition, .noiseReduction, .vignette: return 0...2
         }
     }
     var defaultValue: Double {
         switch self {
+        case .auto: return 0
         case .highlights: return 1
         case .temperature: return 6500
         case .contrast, .saturation: return 1
@@ -720,6 +816,7 @@ struct AdjustmentPanel: View {
     @State private var selected: AdjustmentControl = .exposure
 
     private var value: Binding<Double> {
+        if selected == .auto { return Binding(get: { settings.autoEnhance ? 1 : 0 }, set: { settings.autoEnhance = $0 >= 0.5 }) }
         if selected == .hue {
             return Binding(get: { settings.hue * 180 / Double.pi }, set: { settings.hue = $0 * Double.pi / 180 })
         }
@@ -739,6 +836,16 @@ struct AdjustmentPanel: View {
                 HStack {
                     Label("Kaynak profili", systemImage: "camera.aperture").font(.system(size: 11, weight: .medium))
                     Spacer(minLength: 8)
+                    Button {
+                        settings.autoEnhance.toggle()
+                        selected = .auto
+                    } label: {
+                        Label("Otomatik", systemImage: "wand.and.stars")
+                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(settings.autoEnhance ? .black : accent)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(settings.autoEnhance ? accent : accent.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                     Picker("Kaynak profili", selection: $settings.source) {
                         ForEach(SourceDetector.profiles, id: \.self) { Text($0).tag($0) }
                     }
@@ -766,12 +873,15 @@ struct AdjustmentPanel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
                         ForEach(AdjustmentControl.allCases) { control in
-                            Button { selected = control } label: {
+                            Button {
+                                if control == .auto { settings.autoEnhance.toggle() }
+                                else { selected = control }
+                            } label: {
                                 VStack(spacing: 5) {
                                     Image(systemName: control.symbol).font(.system(size: 16, weight: .medium))
                                     Text(control.rawValue).font(.system(size: 8, weight: .medium)).lineLimit(1)
                                 }
-                                .foregroundStyle(selected == control ? accent : .white.opacity(0.55))
+                                .foregroundStyle((selected == control || (control == .auto && settings.autoEnhance)) ? accent : .white.opacity(0.55))
                                 .frame(width: 54).contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -927,15 +1037,23 @@ struct SettingsView: View {
 
 struct CubeLUT { let dimension: Int; let values: [Float]
     static func sourceTransform(for profile: String, bundled: [(String, String, URL)]) -> CubeLUT? {
-        let lutName: String
+        let candidates: [String]
         switch profile {
-        case "D-Log M": lutName = "D-LogM"
-        case "Ace Pro 2 (I-Log)": lutName = "AcePro2_I-Log"
-        case "Apple Log 2": lutName = "AppleLog2"
-        case "Apple Log": lutName = "AppleLog"
+        case "D-Log M": candidates = ["D-LogM"]
+        case "DJI Mini 4 Pro (D-Log M)": candidates = ["DJI Mini 4 Pro D-Log M to Rec709", "D-LogM"]
+        case "OSMO Pocket 4 Pro (D-Log2)": candidates = ["DJI OSMO Pocket 4P D-Log2 to Rec.709"]
+        case "OSMO Pocket 4 Pro (D-Log)": candidates = ["DJI OSMO Pocket 4 D-Log to Rec.709"]
+        case "OSMO Pocket 4 (D-Log)": candidates = ["DJI OSMO Pocket 4 D-Log to Rec.709"]
+        case "Sony S-Log2": candidates = ["Sony S-Log2 to Rec709"]
+        case "Sony S-Log3 Cine": candidates = ["Sony S-Log3 Cine to Rec709"]
+        case "Ace Pro 2 (I-Log)": candidates = ["AcePro2_I-Log"]
+        case "GO Ultra (I-Log)": candidates = ["GO Ultra_I-Log"]
+        case "Luna Ultra (I-Log)": candidates = ["Luna_Ultra_I-Log"]
+        case "Apple Log 2": candidates = ["AppleLog2"]
+        case "Apple Log": candidates = ["AppleLog"]
         default: return nil
         }
-        guard let match = bundled.first(where: { $0.1 == lutName }) else { return nil }
+        guard let match = bundled.first(where: { candidates.contains($0.1) }) else { return nil }
         return load(url: match.2)
     }
     static func loadBundled() -> [(String, String, URL)] {
@@ -1030,6 +1148,22 @@ enum ImageRenderer { static let context = CIContext()
 
         if let lut { image = apply(lut, to: image, intensity: min(1, max(0, settings.intensity / 100))) }
 
+        if settings.autoEnhance {
+            let options: [CIImageAutoAdjustmentOption: Any] = [.enhance: true, .redEye: false]
+            for filter in image.autoAdjustmentFilters(options: options) {
+                filter.setValue(image, forKey: kCIInputImageKey)
+                if let corrected = filter.outputImage { image = corrected }
+            }
+        }
+
+        if settings.brilliance != 0 {
+            let brilliance = CIFilter.highlightShadowAdjust()
+            brilliance.inputImage = image
+            brilliance.shadowAmount = Float(1 + settings.brilliance * 0.32)
+            brilliance.highlightAmount = Float(1 - settings.brilliance * 0.22)
+            image = brilliance.outputImage ?? image
+        }
+
         let controls = CIFilter.colorControls()
         controls.inputImage = image
         controls.saturation = Float(settings.saturation)
@@ -1068,15 +1202,23 @@ enum ImageRenderer { static let context = CIContext()
         vibranceFilter.amount = Float(settings.vibrance)
         image = vibranceFilter.outputImage ?? image
 
-        let sharp = CIFilter.sharpenLuminance()
+        if settings.noiseReduction > 0 {
+            let denoise = CIFilter(name: "CINoiseReduction")
+            denoise?.setValue(image, forKey: kCIInputImageKey)
+            denoise?.setValue(Float(settings.noiseReduction) * 0.08, forKey: "inputNoiseLevel")
+            denoise?.setValue(Float(1 - settings.noiseReduction * 0.7), forKey: "inputSharpness")
+            image = denoise?.outputImage ?? image
+        }
+        let sharp = CIFilter.unsharpMask()
         sharp.inputImage = image
-        sharp.sharpness = Float(settings.sharpness)
+        sharp.radius = Float(1 + settings.definition * 2)
+        sharp.intensity = Float(settings.sharpness * 0.65 + settings.definition * 0.5)
         image = sharp.outputImage ?? image
 
-        if settings.blacks != 0 || settings.whites != 0 || settings.wheelShadows != 0 || settings.wheelMidtones != 0 || settings.wheelHighlights != 0 || settings.curveBlack != 0 || settings.curveMid != 0.5 || settings.curveWhite != 1 {
+        if settings.blacks != 0 || settings.blackPoint != 0 || settings.whites != 0 || settings.wheelShadows != 0 || settings.wheelMidtones != 0 || settings.wheelHighlights != 0 || settings.curveBlack != 0 || settings.curveMid != 0.5 || settings.curveWhite != 1 {
             let levels = CIFilter.colorMatrix()
             levels.inputImage = image
-            let blackPoint = min(0.45, max(-0.25, settings.blacks * 0.12 + settings.curveBlack))
+            let blackPoint = min(0.45, max(-0.25, settings.blacks * 0.12 + settings.blackPoint * 0.12 + settings.curveBlack))
             let whitePoint = min(1.25, max(0.55, 1 + settings.whites * 0.12 + (settings.curveWhite - 1)))
             let scale = CGFloat(1 / max(0.1, whitePoint - blackPoint))
             levels.rVector = CIVector(x: scale, y: 0, z: 0, w: 0)
