@@ -439,7 +439,7 @@ private final class BatchExportModel: ObservableObject {
                 for (index, project) in projects.enumerated() {
                     currentItem = project.fileName
                     do {
-                        let url = try await makeOutput(for: project, index: index, folder: folder, toPhotos: false)
+                        guard let url = try await makeOutput(for: project, index: index, folder: folder, toPhotos: false) else { throw CocoaError(.fileWriteUnknown) }
                         outputURLs.append(url); completed += 1
                     } catch { failures.append("\(project.fileName): \(error.localizedDescription)") }
                 }
