@@ -24,6 +24,9 @@ jobs:
           LUT_COUNT=$(find "$APP_PATH/LUTs" -type f -name '*.lutf' | wc -l | tr -d ' ')
           echo "Bundled LUT count: $LUT_COUNT"
           test "$LUT_COUNT" -eq 100
+          test -s "$APP_PATH/LUTs/AppleLog.lutf"
+          test -s "$APP_PATH/LUTs/AppleLog2.lutf"
+          test -s "$APP_PATH/LUTs/Cinematic/Cinematic.lutf"
           ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/LumaGrade")
           [[ " $ARCHS " == *" arm64 "* ]]
       - name: Package unsigned IPA

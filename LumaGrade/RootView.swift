@@ -145,8 +145,14 @@ struct ProjectsView: View {
                         .padding(22).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
                 }
             }
-            .navigationTitle("Projeler")
+            .navigationTitle("")
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 1) {
+                        Text("LUT STUDIO").font(.system(size: 9, weight: .bold, design: .rounded)).tracking(2).foregroundStyle(accent)
+                        Text("Projeler").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { showingImagePicker = true } label: { Label("Fotoğraf Ekle", systemImage: "photo") }
@@ -172,7 +178,40 @@ struct ProjectsView: View {
         }
     }
     private var empty: some View { ContentUnavailableView("İlk düzenlemeni oluştur", systemImage: "camera.filters", description: Text("Fotoğraf seç, LUT uygula ve görünümünü kaydet.")) }
-    private func card(_ project: GradeProject) -> some View { Button { editor = project } label: { VStack(alignment: .leading, spacing: 7) { Group { if let image = library.image(for: project) { Image(uiImage: image).resizable().scaledToFill() } else { Color.gray } }.frame(height: 126).clipShape(RoundedRectangle(cornerRadius: 14)); Text(project.settings.lutName).font(.caption.weight(.semibold)).lineLimit(1); Text(project.createdAt, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.secondary) }.contentShape(Rectangle()) }.buttonStyle(.plain).contextMenu { Button(role: .destructive) { library.remove(project) } label: { Label("Delete", systemImage: "trash") } } }
+    private func card(_ project: GradeProject) -> some View {
+        let isVideo = ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased())
+        return Button { editor = project } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                ZStack(alignment: .bottomLeading) {
+                    Group {
+                        if !isVideo, let image = library.image(for: project) {
+                            Image(uiImage: image).resizable().scaledToFill()
+                        } else {
+                            Rectangle().fill(Color.white.opacity(0.06))
+                                .overlay(Image(systemName: isVideo ? "film" : "photo").font(.system(size: 24, weight: .light)).foregroundStyle(accent.opacity(0.8)))
+                        }
+                    }
+                    .frame(height: 126).frame(maxWidth: .infinity).clipped()
+                    LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .center, endPoint: .bottom)
+                    Label(isVideo ? "VİDEO" : "FOTOĞRAF", systemImage: isVideo ? "play.fill" : "photo")
+                        .font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 6)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Text(project.settings.lutName == "Original" ? (isVideo ? "Video projesi" : "Fotoğraf projesi") : project.settings.lutName)
+                    .font(.system(size: 11, weight: .semibold)).lineLimit(1).foregroundStyle(.white)
+                HStack(spacing: 4) {
+                    Text(project.createdAt, format: .dateTime.month(.abbreviated).day())
+                    Text("·")
+                    Text(project.settings.source)
+                }
+                .font(.system(size: 9, weight: .medium)).foregroundStyle(.white.opacity(0.5)).lineLimit(1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu { Button(role: .destructive) { library.remove(project) } label: { Label("Projeyi sil", systemImage: "trash") } }
+    }
     private func importImage(_ item: PhotosPickerItem) {
         Task { @MainActor in
             isImportingMedia = true
@@ -258,7 +297,7 @@ enum SourceDetector {
 
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
-    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Tümü"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
+    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
     @State private var lutLoadError: String?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
@@ -270,11 +309,15 @@ struct EditorView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }
+                    .frame(height: 330)
                     .padding(.horizontal, 12)
                 previewActions
-                Picker("Düzenleme", selection: $tab) {
-                    Text("Filtreler").tag(0); Text("Ayarla").tag(1); Text("Efektler").tag(2)
-                }.pickerStyle(.segmented).padding()
+                HStack(spacing: 5) {
+                    editorTab("Filtreler", symbol: "camera.filters", value: 0)
+                    editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
+                    editorTab("Efektler", symbol: "sparkles", value: 2)
+                }
+                .padding(5).background(Color.white.opacity(0.07), in: Capsule()).padding(.horizontal, 20).padding(.vertical, 10)
                 panel.padding(.horizontal).padding(.bottom, 8)
             }
             .background(Color.black)
@@ -338,9 +381,34 @@ struct EditorView: View {
             } message: { Text(lutLoadError ?? "") }
         }
     }
+    private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
+        Button { tab = value } label: {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(tab == value ? .black : .white.opacity(0.75))
+                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                .background(tab == value ? accent : .clear, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
     private var preview: some View {
         Group {
-            if isVideo, let videoPlayer { VideoPlayer(player: videoPlayer).clipShape(RoundedRectangle(cornerRadius: 18)) }
+            if isVideo, let videoPlayer {
+                VideoPlayer(player: videoPlayer)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .onLongPressGesture(minimumDuration: 0.12, pressing: { pressing in
+                        showingOriginal = pressing
+                        guard let item = videoPlayer.currentItem else { return }
+                        item.videoComposition = pressing ? nil : makeVideoComposition(asset: item.asset)
+                    }, perform: {})
+                    .overlay(alignment: .top) {
+                        if showingOriginal {
+                            Text("ORİJİNAL").font(.caption.bold()).padding(8)
+                                .background(.black.opacity(0.7), in: Capsule()).padding(.top, 10)
+                        }
+                    }
+            }
             else if isVideo { ProgressView("Video yükleniyor") }
             else if let source = library.image(for: project) {
                 let rendered = showingOriginal ? source : ImageRenderer.grade(source, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
@@ -580,35 +648,152 @@ struct ExportSettingsView: View {
     }
 }
 
+private enum AdjustmentControl: String, CaseIterable, Identifiable {
+    case exposure = "Pozlama", shadows = "Gölgeler", highlights = "Açık alanlar", whites = "Beyazlar", blacks = "Siyahlar"
+    case temperature = "Sıcaklık", tint = "Tint", contrast = "Kontrast", hue = "Hue", lightness = "HLS Açıklık"
+    case vibrance = "Canlılık", saturation = "Doygunluk", sharpness = "Keskinlik", vignette = "Vinyet"
+    var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .exposure: return "sun.max"
+        case .shadows: return "moon"
+        case .highlights: return "sun.max.fill"
+        case .whites: return "circle.lefthalf.filled"
+        case .blacks: return "circle.lefthalf.striped.horizontal"
+        case .temperature: return "thermometer.medium"
+        case .tint: return "drop.halffull"
+        case .contrast: return "circle.lefthalf.filled"
+        case .hue: return "circle.hexagongrid"
+        case .lightness: return "sun.horizon"
+        case .vibrance: return "sparkles"
+        case .saturation: return "drop.fill"
+        case .sharpness: return "triangle"
+        case .vignette: return "viewfinder"
+        }
+    }
+    var keyPath: WritableKeyPath<GradeSettings, Double>? {
+        switch self {
+        case .exposure: return \.exposure
+        case .shadows: return \.shadows
+        case .highlights: return \.highlights
+        case .whites: return \.whites
+        case .blacks: return \.blacks
+        case .temperature: return \.temperature
+        case .tint: return \.tint
+        case .contrast: return \.contrast
+        case .hue: return nil
+        case .lightness: return \.brightness
+        case .vibrance: return \.vibrance
+        case .saturation: return \.saturation
+        case .sharpness: return \.sharpness
+        case .vignette: return \.vignette
+        }
+    }
+    var range: ClosedRange<Double> {
+        switch self {
+        case .exposure: return -4...4
+        case .shadows: return -1...1
+        case .highlights: return 0...2
+        case .whites, .blacks, .vibrance: return -1...1
+        case .temperature: return 2000...12000
+        case .tint: return -100...100
+        case .contrast, .saturation: return 0...2
+        case .hue: return -180...180
+        case .lightness: return -0.5...0.5
+        case .sharpness, .vignette: return 0...2
+        }
+    }
+    var defaultValue: Double {
+        switch self {
+        case .highlights: return 1
+        case .temperature: return 6500
+        case .contrast, .saturation: return 1
+        default: return 0
+        }
+    }
+}
+
 struct AdjustmentPanel: View {
     @Binding var settings: GradeSettings
     var isVideo = false
     var videoDuration = 0.0
+    @State private var selected: AdjustmentControl = .exposure
+
+    private var value: Binding<Double> {
+        if selected == .hue {
+            return Binding(get: { settings.hue * 180 / Double.pi }, set: { settings.hue = $0 * Double.pi / 180 })
+        }
+        let key = selected.keyPath!
+        return Binding(get: { settings[keyPath: key] }, set: { settings[keyPath: key] = $0 })
+    }
+    private var valueText: String {
+        let number = selected == .temperature ? String(Int(value.wrappedValue)) : String(format: "%.2f", value.wrappedValue)
+        if selected == .hue { return "\(Int(value.wrappedValue.rounded()))°" }
+        if selected == .temperature { return "\(number) K" }
+        return number
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack { Text("Kaynak profili"); Spacer(); Picker("Kaynak profili", selection: $settings.source) { ForEach(SourceDetector.profiles, id: \.self) { Text($0).tag($0) } }.labelsHidden() }
-                Group {
-                    adjust("Pozlama", \.exposure, -4...4)
-                    adjust("Gölgeler", \.shadows, -1...1)
-                    adjust("Açık alanlar", \.highlights, 0...2)
-                    adjust("Beyazlar", \.whites, -1...1)
-                    adjust("Siyahlar", \.blacks, -1...1)
-                    adjust("Sıcaklık", \.temperature, 2000...12000)
-                    adjust("Tint", \.tint, -100...100)
-                    adjust("Kontrast", \.contrast, 0...2)
-                    hueAdjustment
-                    adjust("HLS · Açıklık", \.brightness, -0.5...0.5)
-                    adjust("Canlılık", \.vibrance, -1...1)
-                    adjust("Doygunluk", \.saturation, 0...2)
-                    adjust("Keskinlik", \.sharpness, 0...2)
-                    adjust("Vinyet", \.vignette, 0...2)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack {
+                    Label("Kaynak profili", systemImage: "camera.aperture").font(.system(size: 11, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Kaynak profili", selection: $settings.source) {
+                        ForEach(SourceDetector.profiles, id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden().tint(accent).font(.system(size: 11, weight: .semibold))
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+
+                VStack(spacing: 8) {
+                    HStack {
+                        Text(selected.rawValue).font(.system(size: 13, weight: .semibold))
+                        Spacer()
+                        Text(valueText).font(.system(size: 12, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(accent)
+                        Button { value.wrappedValue = selected.defaultValue } label: {
+                            Image(systemName: "arrow.counterclockwise").font(.system(size: 11, weight: .semibold))
+                                .frame(width: 28, height: 28).background(Color.white.opacity(0.08), in: Circle())
+                        }
+                        .buttonStyle(.plain).accessibilityLabel("\(selected.rawValue) sıfırla")
+                    }
+                    Slider(value: value, in: selected.range).tint(accent)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(AdjustmentControl.allCases) { control in
+                            Button { selected = control } label: {
+                                VStack(spacing: 5) {
+                                    Image(systemName: control.symbol).font(.system(size: 16, weight: .medium))
+                                    Text(control.rawValue).font(.system(size: 8, weight: .medium)).lineLimit(1)
+                                }
+                                .foregroundStyle(selected == control ? accent : .white.opacity(0.55))
+                                .frame(width: 54).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }.padding(.horizontal, 4).padding(.vertical, 3)
+                }
+
+                DisclosureGroup("Renk tekerleri") {
+                    settingSlider("Gölgeler", \.wheelShadows, -1...1)
+                    settingSlider("Orta tonlar", \.wheelMidtones, -1...1)
+                    settingSlider("Açık alanlar", \.wheelHighlights, -1...1)
+                }
+                DisclosureGroup("Eğriler") {
+                    settingSlider("Siyah noktası", \.curveBlack, 0...0.25)
+                    settingSlider("Orta nokta", \.curveMid, 0.1...0.9)
+                    settingSlider("Beyaz noktası", \.curveWhite, 0.75...1)
                 }
                 DisclosureGroup("Maske") {
-                    Toggle("Merkez maskesini etkinleştir", isOn: $settings.maskEnabled)
-                    adjust("Maskeli pozlama", \.maskExposure, -3...3)
-                    adjust("Maske boyutu", \.maskRadius, 0.1...1)
-                    adjust("Kenar yumuşatma", \.maskFeather, 0.02...0.6)
+                    Toggle("Merkez maskesini etkinleştir", isOn: $settings.maskEnabled).tint(accent)
+                    settingSlider("Maskeli pozlama", \.maskExposure, -3...3)
+                    settingSlider("Maske boyutu", \.maskRadius, 0.1...1)
+                    settingSlider("Kenar yumuşatma", \.maskFeather, 0.02...0.6)
                 }
                 DisclosureGroup("Kırpma") {
                     Picker("En-boy oranı", selection: $settings.cropAspect) {
@@ -618,47 +803,23 @@ struct AdjustmentPanel: View {
                 }
                 if isVideo && videoDuration > 0 {
                     DisclosureGroup("Video kesme · \(time(settings.trimStart * videoDuration)) – \(time(settings.trimEnd * videoDuration))") {
-                        VStack(alignment: .leading) {
-                            Text("Başlangıç · \(time(settings.trimStart * videoDuration))").font(.caption)
-                            Slider(value: Binding(get: { settings.trimStart }, set: { settings.trimStart = min($0, settings.trimEnd) }), in: 0...1).tint(accent)
-                            Text("Bitiş · \(time(settings.trimEnd * videoDuration))").font(.caption)
-                            Slider(value: Binding(get: { settings.trimEnd }, set: { settings.trimEnd = max($0, settings.trimStart) }), in: 0...1).tint(accent)
-                        }
+                        Text("Başlangıç · \(time(settings.trimStart * videoDuration))").font(.caption)
+                        Slider(value: Binding(get: { settings.trimStart }, set: { settings.trimStart = min($0, settings.trimEnd) }), in: 0...1).tint(accent)
+                        Text("Bitiş · \(time(settings.trimEnd * videoDuration))").font(.caption)
+                        Slider(value: Binding(get: { settings.trimEnd }, set: { settings.trimEnd = max($0, settings.trimStart) }), in: 0...1).tint(accent)
                     }
                 }
-                DisclosureGroup("Renk tekerleri") {
-                    adjust("Gölgeler", \.wheelShadows, -1...1)
-                    adjust("Orta tonlar", \.wheelMidtones, -1...1)
-                    adjust("Açık alanlar", \.wheelHighlights, -1...1)
-                }
-                DisclosureGroup("Eğriler") {
-                    adjust("Siyah noktası", \.curveBlack, 0...0.25)
-                    adjust("Orta nokta", \.curveMid, 0.1...0.9)
-                    adjust("Beyaz noktası", \.curveWhite, 0.75...1)
-                }
             }
-            .padding(.vertical, 8)
+            .font(.system(size: 12)).foregroundStyle(.white)
+            .padding(.vertical, 6)
         }
         .frame(maxHeight: 245)
     }
-    private func adjust(_ title: String, _ key: WritableKeyPath<GradeSettings, Double>, _ range: ClosedRange<Double>) -> some View {
+
+    private func settingSlider(_ title: String, _ key: WritableKeyPath<GradeSettings, Double>, _ range: ClosedRange<Double>) -> some View {
         VStack(spacing: 2) {
             HStack { Text(title).font(.caption); Spacer(); Text(settings[keyPath: key], format: .number.precision(.fractionLength(2))).font(.caption2).foregroundStyle(.secondary) }
             Slider(value: Binding(get: { settings[keyPath: key] }, set: { settings[keyPath: key] = $0 }), in: range).tint(accent)
-        }
-    }
-    private var hueAdjustment: some View {
-        VStack(spacing: 2) {
-            HStack {
-                Text("Hue").font(.caption)
-                Spacer()
-                Text("\(Int((settings.hue * 180 / Double.pi).rounded()))°")
-                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-            }
-            Slider(value: Binding(
-                get: { settings.hue * 180 / Double.pi },
-                set: { settings.hue = $0 * Double.pi / 180 }
-            ), in: -180...180).tint(accent)
         }
     }
     private func time(_ seconds: Double) -> String { let value = max(0, Int(seconds)); return String(format: "%02d:%02d", value / 60, value % 60) }
@@ -982,10 +1143,12 @@ enum ImageRenderer { static let context = CIContext()
     }
 
     private static func apply(_ lut: CubeLUT, to image: CIImage, intensity: Double) -> CIImage {
-        let cube = CIFilter.colorCube()
-        cube.inputImage = image
-        cube.cubeDimension = Float(lut.dimension)
-        cube.cubeData = rgbaData(from: lut.values, dimension: lut.dimension)
+        guard let cube = CIFilter(name: "CIColorCubeWithColorSpace"),
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return image }
+        cube.setValue(image, forKey: kCIInputImageKey)
+        cube.setValue(Float(lut.dimension), forKey: "inputCubeDimension")
+        cube.setValue(rgbaData(from: lut.values, dimension: lut.dimension), forKey: "inputCubeData")
+        cube.setValue(colorSpace, forKey: "inputColorSpace")
         guard let graded = cube.outputImage else { return image }
         guard intensity < 1 else { return graded }
         let blend = CIFilter.blendWithMask()
