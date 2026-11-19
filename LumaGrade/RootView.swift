@@ -29,8 +29,9 @@ struct GradeSettings: Codable, Equatable {
     var exportCodec = "HEVC"; var exportResolution = "Orijinal"; var exportBitrateMode = "Otomatik"; var exportBitrateMbps = 20.0
     var vignette = 0.0; var bloom = 0.0; var grain = 0.0
     var brilliance = 0.0; var blackPoint = 0.0; var definition = 0.0; var noiseReduction = 0.0; var autoEnhance = false
+    var customLUTFileName: String? = nil
     var source = "Regular"
-    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, exportCodec, exportResolution, exportBitrateMode, exportBitrateMbps, vignette, bloom, grain, brilliance, blackPoint, definition, noiseReduction, autoEnhance, source }
+    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, exportCodec, exportResolution, exportBitrateMode, exportBitrateMbps, vignette, bloom, grain, brilliance, blackPoint, definition, noiseReduction, autoEnhance, customLUTFileName, source }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -74,7 +75,46 @@ struct GradeSettings: Codable, Equatable {
         definition = try c.decodeIfPresent(Double.self, forKey: .definition) ?? 0
         noiseReduction = try c.decodeIfPresent(Double.self, forKey: .noiseReduction) ?? 0
         autoEnhance = try c.decodeIfPresent(Bool.self, forKey: .autoEnhance) ?? false
+        customLUTFileName = try c.decodeIfPresent(String.self, forKey: .customLUTFileName)
         source = try c.decodeIfPresent(String.self, forKey: .source) ?? "Regular"
+    }
+}
+
+enum CustomLUTStore {
+    static var directory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("CustomLUTs", isDirectory: true)
+    }
+    static func importFile(_ url: URL) throws -> URL {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let base = url.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        var destination = directory.appendingPathComponent(base).appendingPathExtension("cube")
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            destination = directory.appendingPathComponent("\(base) (\(suffix))").appendingPathExtension("cube")
+            suffix += 1
+        }
+        try FileManager.default.copyItem(at: url, to: destination)
+        guard CubeLUT.load(url: destination) != nil else {
+            try? FileManager.default.removeItem(at: destination)
+            throw MediaImportError.invalidLUT
+        }
+        return destination
+    }
+    static func loadAll() -> [(String, String, URL)] {
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return [] }
+        return urls.filter { $0.pathExtension.lowercased() == "cube" }
+            .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+            .map { ("Özel", $0.deletingPathExtension().lastPathComponent, $0) }
+    }
+    static func url(for fileName: String?) -> URL? {
+        guard let fileName, !fileName.isEmpty else { return nil }
+        let url = directory.appendingPathComponent(fileName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 }
 
@@ -124,7 +164,12 @@ struct ProjectsView: View {
     @State private var showingVideoPicker = false
     @State private var isImportingMedia = false
     @State private var importError: String?
+    @State private var isSelectingProjects = false
+    @State private var selectedProjectIDs = Set<UUID>()
+    @State private var showingBatchGrade = false
+    @State private var showingBatchExport = false
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 12)]
+    private var selectedProjects: [GradeProject] { library.projects.filter { selectedProjectIDs.contains($0.id) } }
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -138,13 +183,33 @@ struct ProjectsView: View {
                         }
                     }
                 }
-                Button { choosingMedia = true } label: {
-                    Label("Yeni Proje", systemImage: "plus")
-                        .font(.headline).padding(.horizontal, 20).frame(height: 54)
-                        .background(accent, in: Capsule()).foregroundStyle(.black)
+                if isSelectingProjects {
+                    HStack(spacing: 10) {
+                        Button { showingBatchGrade = true } label: {
+                            Label("Ayarları uygula", systemImage: "slider.horizontal.3")
+                                .frame(maxWidth: .infinity).frame(height: 48)
+                        }
+                        .disabled(selectedProjects.isEmpty)
+                        .background(selectedProjects.isEmpty ? Color.gray.opacity(0.25) : accent, in: Capsule())
+                        .foregroundStyle(selectedProjects.isEmpty ? .white.opacity(0.5) : .black)
+                        Button { showingBatchExport = true } label: {
+                            Label("Dışa aktar", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity).frame(height: 48)
+                        }
+                        .disabled(selectedProjects.isEmpty)
+                        .background(Color.white.opacity(selectedProjects.isEmpty ? 0.08 : 0.15), in: Capsule())
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 16).padding(.bottom, 18)
+                } else {
+                    Button { choosingMedia = true } label: {
+                        Label("Yeni Proje", systemImage: "plus")
+                            .font(.headline).padding(.horizontal, 20).frame(height: 54)
+                            .background(accent, in: Capsule()).foregroundStyle(.black)
+                    }
+                    .padding(.bottom, 18)
+                    .disabled(isImportingMedia)
                 }
-                .padding(.bottom, 18)
-                .disabled(isImportingMedia)
                 if isImportingMedia {
                     Color.black.opacity(0.42).ignoresSafeArea()
                     ProgressView("Medya içe aktarılıyor…")
@@ -153,6 +218,13 @@ struct ProjectsView: View {
             }
             .navigationTitle("")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(isSelectingProjects ? "Vazgeç" : "Seç") {
+                        isSelectingProjects.toggle()
+                        selectedProjectIDs.removeAll()
+                    }
+                    .disabled(library.projects.isEmpty || isImportingMedia)
+                }
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 1) {
                         Text("LUT STUDIO").font(.system(size: 9, weight: .bold, design: .rounded)).tracking(2).foregroundStyle(accent)
@@ -160,12 +232,16 @@ struct ProjectsView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    if isSelectingProjects {
+                        Text("\(selectedProjectIDs.count) seçili").font(.caption).foregroundStyle(accent)
+                    } else {
                     Menu {
                         Button { showingImagePicker = true } label: { Label("Fotoğraf Ekle", systemImage: "photo") }
                         Button { showingVideoPicker = true } label: { Label("Video Ekle", systemImage: "video") }
                         Button { importingLUT = true } label: { Label("LUT İçe Aktar", systemImage: "cube.transparent") }
                     } label: { Image(systemName: "plus") }
                     .disabled(isImportingMedia)
+                    }
                 }
             }
             .confirmationDialog("Yeni Proje", isPresented: $choosingMedia, titleVisibility: .visible) {
@@ -176,8 +252,21 @@ struct ProjectsView: View {
             .photosPicker(isPresented: $showingVideoPicker, selection: $videoItem, matching: .videos)
             .onChange(of: pickerItem) { _, item in if let item { importImage(item) } }
             .onChange(of: videoItem) { _, item in if let item { importVideo(item) } }
-            .fileImporter(isPresented: $importingLUT, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { _ in }
+            .fileImporter(isPresented: $importingLUT, allowedContentTypes: [UTType(filenameExtension: "cube")!], allowsMultipleSelection: true) { result in
+                switch result {
+                case .success(let urls):
+                    do { for url in urls { _ = try CustomLUTStore.importFile(url) } }
+                    catch { importError = "LUT içe aktarılamadı: \(error.localizedDescription)" }
+                case .failure(let error): importError = "LUT içe aktarılamadı: \(error.localizedDescription)"
+                }
+            }
             .fullScreenCover(item: $editor) { EditorView(project: $0) }
+            .sheet(isPresented: $showingBatchGrade) {
+                BatchGradeView(projects: selectedProjects, library: library)
+            }
+            .sheet(isPresented: $showingBatchExport) {
+                BatchExportView(projects: selectedProjects, library: library)
+            }
             .alert("Medya eklenemedi", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
                 Button("Tamam", role: .cancel) { importError = nil }
             } message: { Text(importError ?? "Fotoğraf veya video içe aktarılamadı.") }
@@ -186,7 +275,12 @@ struct ProjectsView: View {
     private var empty: some View { ContentUnavailableView("İlk düzenlemeni oluştur", systemImage: "camera.filters", description: Text("Fotoğraf seç, LUT uygula ve görünümünü kaydet.")) }
     private func card(_ project: GradeProject) -> some View {
         let isVideo = ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased())
-        return Button { editor = project } label: {
+        return Button {
+            if isSelectingProjects {
+                if selectedProjectIDs.contains(project.id) { selectedProjectIDs.remove(project.id) }
+                else { selectedProjectIDs.insert(project.id) }
+            } else { editor = project }
+        } label: {
             VStack(alignment: .leading, spacing: 7) {
                 ZStack(alignment: .bottomLeading) {
                     MediaProjectThumbnail(url: library.videoURL(for: project), isVideo: isVideo)
@@ -195,6 +289,11 @@ struct ProjectsView: View {
                     Label(isVideo ? "VİDEO" : "FOTOĞRAF", systemImage: isVideo ? "play.fill" : "photo")
                         .font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
                         .padding(.horizontal, 8).padding(.vertical, 6)
+                    if isSelectingProjects {
+                        Image(systemName: selectedProjectIDs.contains(project.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 23, weight: .semibold)).foregroundStyle(selectedProjectIDs.contains(project.id) ? accent : .white)
+                            .padding(8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 Text(project.settings.lutName == "Original" ? (isVideo ? "Video projesi" : "Fotoğraf projesi") : project.settings.lutName)
@@ -245,15 +344,289 @@ struct ProjectsView: View {
     }
 }
 
+private struct BatchLUTOption: Identifiable {
+    let category: String
+    let name: String
+    let url: URL
+    var id: String { url.path }
+}
+
+private struct BatchGradeView: View {
+    @Environment(\.dismiss) private var dismiss
+    let projects: [GradeProject]
+    let library: ProjectLibrary
+    @State private var options = (CubeLUT.loadBundled() + CustomLUTStore.loadAll()).map { BatchLUTOption(category: $0.0, name: $0.1, url: $0.2) }
+    @State private var selectedPath = "Original"
+    @State private var intensity = 100.0
+    @State private var applied = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Seçili projeler · \(projects.count)") {
+                    Text("Aynı LUT ve yoğunluk tüm seçili projelere uygulanır. Her projenin kaynak profili korunur.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Picker("LUT", selection: $selectedPath) {
+                        Text("Yok").tag("Original")
+                        ForEach(options) { option in Text("\(option.category) · \(option.name)").tag(option.id) }
+                    }
+                    Slider(value: $intensity, in: 0...100, step: 1) {
+                        Text("Yoğunluk · \(Int(intensity))%")
+                    }
+                    .tint(accent)
+                }
+                Section {
+                    Button("Seçili projelere uygula", action: apply)
+                        .font(.headline).foregroundStyle(accent).disabled(projects.isEmpty || applied)
+                }
+            }
+            .navigationTitle("Toplu düzenleme")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Kapat") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+    private func apply() {
+        guard !applied else { return }
+        for item in projects {
+            var project = item
+            if selectedPath == "Original" {
+                project.settings.lutName = "Original"
+                project.settings.customLUTFileName = nil
+            } else if let option = options.first(where: { $0.id == selectedPath }) {
+                project.settings.lutName = option.name
+                project.settings.customLUTFileName = option.category == "Özel" ? option.url.lastPathComponent : nil
+            }
+            project.settings.intensity = intensity
+            library.update(project)
+        }
+        applied = true
+        dismiss()
+    }
+}
+
+@MainActor
+private final class BatchExportModel: ObservableObject {
+    @Published var isRunning = false
+    @Published var progress = 0.0
+    @Published var currentItem = ""
+    @Published var message = ""
+    @Published var exportURLs: [URL] = []
+    private let projects: [GradeProject]
+    private let library: ProjectLibrary
+    private let allLUTs = CubeLUT.loadBundled() + CustomLUTStore.loadAll()
+    var projectCount: Int { projects.count }
+
+    init(projects: [GradeProject], library: ProjectLibrary) {
+        self.projects = projects
+        self.library = library
+    }
+
+    func start(toPhotos: Bool) {
+        guard !isRunning, !projects.isEmpty else { return }
+        isRunning = true; progress = 0; message = ""; exportURLs = []
+        Task { await run(toPhotos: toPhotos) }
+    }
+
+    private func run(toPhotos: Bool) async {
+        var outputURLs: [URL] = []
+        var completed = 0
+        var failures: [String] = []
+        do {
+            if !toPhotos {
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("LumaGrade-Batch-\(UUID().uuidString)", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                for (index, project) in projects.enumerated() {
+                    currentItem = project.fileName
+                    do {
+                        let url = try await makeOutput(for: project, index: index, folder: folder, toPhotos: false)
+                        outputURLs.append(url); completed += 1
+                    } catch { failures.append("\(project.fileName): \(error.localizedDescription)") }
+                }
+            } else {
+                for (index, project) in projects.enumerated() {
+                    currentItem = project.fileName
+                    do { _ = try await makeOutput(for: project, index: index, folder: FileManager.default.temporaryDirectory, toPhotos: true); completed += 1 }
+                    catch { failures.append("\(project.fileName): \(error.localizedDescription)") }
+                }
+            }
+            exportURLs = outputURLs
+            if toPhotos {
+                message = failures.isEmpty ? "\(completed) dosya Fotoğraflar’a kaydedildi." : "\(completed) dosya kaydedildi; \(failures.count) hata oluştu."
+            } else {
+                message = failures.isEmpty ? "\(completed) dosya Dosyalar’a hazır." : "\(completed) dosya hazır; \(failures.count) hata oluştu."
+            }
+            if !failures.isEmpty { message += "\n" + failures.prefix(3).joined(separator: "\n") }
+        } catch { message = error.localizedDescription }
+        isRunning = false
+        progress = 1
+    }
+
+    private func makeOutput(for project: GradeProject, index: Int, folder: URL, toPhotos: Bool) async throws -> URL? {
+        let sourceURL = library.videoURL(for: project)
+        let ext = sourceURL.pathExtension.lowercased()
+        let isVideo = ["mov", "mp4", "m4v"].contains(ext)
+        let settings = project.settings
+        let selectedLUT = settings.customLUTFileName.flatMap(CustomLUTStore.url(for:)).flatMap(CubeLUT.load(url:))
+            ?? allLUTs.first(where: { $0.1 == settings.lutName }).flatMap { CubeLUT.load(url: $0.2) }
+        let sourceTransform = CubeLUT.sourceTransform(for: settings.source, bundled: allLUTs)
+        let outputName = "\(sourceURL.deletingPathExtension().lastPathComponent)-Düzenlendi-\(index + 1)"
+
+        if !isVideo {
+            guard let image = UIImage(contentsOfFile: sourceURL.path) else { throw MediaImportError.invalidImage }
+            let graded = await Task.detached(priority: .userInitiated) {
+                ImageRenderer.resized(ImageRenderer.grade(image, settings: settings, lut: selectedLUT, sourceLUT: sourceTransform), resolution: settings.exportResolution)
+            }.value
+            if toPhotos { try await PhotoLibraryWriter.save(image: graded); progress = Double(index + 1) / Double(projects.count); return nil }
+            let output = folder.appendingPathComponent(outputName).appendingPathExtension("jpg")
+            guard let data = graded.jpegData(compressionQuality: 0.98) else { throw CocoaError(.fileWriteUnknown) }
+            try data.write(to: output, options: .atomic)
+            progress = Double(index + 1) / Double(projects.count)
+            return output
+        }
+
+        let asset = AVURLAsset(url: sourceURL)
+        let duration = CMTimeGetSeconds(try await asset.load(.duration))
+        let start = min(duration, max(0, duration * settings.trimStart))
+        let end = min(duration, max(start + 0.05, duration * settings.trimEnd))
+        guard end > start else { throw CocoaError(.fileWriteInvalidFileName) }
+        let supported = AVAssetExportSession.exportPresets(compatibleWith: asset)
+        guard let session = AVAssetExportSession(asset: asset, presetName: batchPreset(settings, supported: supported)) else { throw CocoaError(.fileWriteUnknown) }
+        let output = folder.appendingPathComponent(outputName).appendingPathExtension("mov")
+        session.outputURL = output; session.outputFileType = .mov
+        session.timeRange = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600), duration: CMTime(seconds: end - start, preferredTimescale: 600))
+        session.videoComposition = AVVideoComposition(asset: asset) { request in
+            let graded = ImageRenderer.grade(request.sourceImage, settings: settings, lut: selectedLUT, sourceLUT: sourceTransform)
+            request.finish(with: graded, context: ImageRenderer.context)
+        }
+        let monitor = Task { @MainActor in
+            while ![AVAssetExportSession.Status.completed, .failed, .cancelled].contains(session.status) {
+                progress = (Double(index) + Double(session.progress)) / Double(projects.count)
+                try? await Task.sleep(for: .milliseconds(180))
+            }
+        }
+        let status: AVAssetExportSession.Status = await withCheckedContinuation { continuation in
+            session.exportAsynchronously { continuation.resume(returning: session.status) }
+        }
+        monitor.cancel()
+        guard status == .completed else { try? FileManager.default.removeItem(at: output); throw session.error ?? CocoaError(.fileWriteUnknown) }
+        if toPhotos { try await PhotoLibraryWriter.save(videoURL: output); try? FileManager.default.removeItem(at: output); progress = Double(index + 1) / Double(projects.count); return nil }
+        progress = Double(index + 1) / Double(projects.count)
+        return output
+    }
+
+    private func batchPreset(_ settings: GradeSettings, supported: [String]) -> String {
+        if settings.exportCodec == "ProRes", supported.contains("AVAssetExportPresetAppleProRes422LPCM") { return "AVAssetExportPresetAppleProRes422LPCM" }
+        if settings.exportCodec == "HEVC", supported.contains(AVAssetExportPresetHEVCHighestQuality) { return AVAssetExportPresetHEVCHighestQuality }
+        return supported.contains(AVAssetExportPresetHighestQuality) ? AVAssetExportPresetHighestQuality : (supported.first ?? AVAssetExportPresetHighestQuality)
+    }
+}
+
+private enum PhotoLibraryWriter {
+    static func save(image: UIImage) async throws {
+        try await ensureAuthorized()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            PHPhotoLibrary.shared().performChanges({ PHAssetChangeRequest.creationRequestForAsset(from: image) }) { saved, error in
+                if saved { continuation.resume() }
+                else { continuation.resume(throwing: error ?? CocoaError(.fileWriteUnknown)) }
+            }
+        }
+    }
+    static func save(videoURL: URL) async throws {
+        try await ensureAuthorized()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            PHPhotoLibrary.shared().performChanges({ PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoURL) }) { saved, error in
+                if saved { continuation.resume() }
+                else { continuation.resume(throwing: error ?? CocoaError(.fileWriteUnknown)) }
+            }
+        }
+    }
+    private static func ensureAuthorized() async throws {
+        let status = await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { continuation.resume(returning: $0) }
+        }
+        guard status == .authorized || status == .limited else { throw MediaImportError.photoPermissionDenied }
+    }
+}
+
+private struct BatchExportView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var model: BatchExportModel
+    @State private var destination = "Dosyalar"
+    @State private var showingDocumentPicker = false
+
+    init(projects: [GradeProject], library: ProjectLibrary) {
+        _model = StateObject(wrappedValue: BatchExportModel(projects: projects, library: library))
+    }
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("\(modelProjectCount) seçili proje, aynı anda sırayla işlenecek.")
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
+                Picker("Hedef", selection: $destination) {
+                    Text("Dosyalar").tag("Dosyalar")
+                    Text("Fotoğraflar").tag("Fotoğraflar")
+                }
+                .pickerStyle(.segmented).disabled(model.isRunning)
+                if model.isRunning {
+                    ProgressView(value: model.progress).tint(accent)
+                    Text("\(Int(model.progress * 100))% · \(model.currentItem)").font(.caption).foregroundStyle(.secondary)
+                }
+                if !model.message.isEmpty { Text(model.message).font(.footnote).textSelection(.enabled) }
+                Button(model.isRunning ? "Dışa aktarılıyor…" : "Toplu dışa aktarmayı başlat") {
+                    model.start(toPhotos: destination == "Fotoğraflar")
+                }
+                .buttonStyle(.borderedProminent).tint(accent).foregroundStyle(.black)
+                .disabled(model.isRunning || modelProjectCount == 0 || !model.exportURLs.isEmpty)
+                Spacer()
+            }
+            .padding(20)
+            .navigationTitle("Toplu dışa aktarma")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Kapat") { dismiss() } } }
+            .sheet(isPresented: $showingDocumentPicker, onDismiss: cleanup) {
+                DocumentExportPicker(urls: model.exportURLs, isPresented: $showingDocumentPicker).ignoresSafeArea()
+            }
+            .onChange(of: model.exportURLs) { _, urls in if !urls.isEmpty { showingDocumentPicker = true } }
+        }
+        .preferredColorScheme(.dark)
+    }
+    private var modelProjectCount: Int { model.projectCount }
+    private func cleanup() { for url in model.exportURLs { try? FileManager.default.removeItem(at: url) } }
+}
+
+private struct DocumentExportPicker: UIViewControllerRepresentable {
+    let urls: [URL]
+    @Binding var isPresented: Bool
+    func makeCoordinator() -> Coordinator { Coordinator(isPresented: $isPresented) }
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting: urls, asCopy: true)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = true
+        return picker
+    }
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        @Binding private var isPresented: Bool
+        init(isPresented: Binding<Bool>) { _isPresented = isPresented }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { isPresented = false }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { isPresented = false }
+    }
+}
+
 private enum MediaImportError: LocalizedError {
     case imageDataUnavailable
     case invalidImage
     case videoDataUnavailable
+    case invalidLUT
+    case photoPermissionDenied
     var errorDescription: String? {
         switch self {
         case .imageDataUnavailable: return "Fotoğraf verisi Fotoğraflar’dan alınamadı."
         case .invalidImage: return "Seçilen dosya geçerli bir fotoğraf olarak açılamadı."
         case .videoDataUnavailable: return "Video dosyası Fotoğraflar’dan alınamadı."
+        case .invalidLUT: return "LUT dosyası geçerli bir 3D .cube LUT değil."
+        case .photoPermissionDenied: return "Fotoğraf arşivine kaydetme izni verilmedi."
         }
     }
 }
@@ -345,13 +718,16 @@ struct EditorView: View {
     @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
     @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
+    @State private var showingPresets = false
+    @State private var favoriteLUTNames = Set(UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteLUTs") ?? [])
     @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
     @State private var isExporting = false; @State private var exportProgress = 0.0
+    @State private var showingFileExportPicker = false; @State private var fileExportURLs: [URL] = []
     private var isVideo: Bool { ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased()) }
     private var lutCategories: [String] {
         let available = Set(bundledLUTs.map { $0.0 })
-        let preferred = ["Cinematic", "Social", "Clean", "Daily", "Essentials", "Movies", "Dark", "Kamera"]
-        return preferred.filter { available.contains($0) } + available.subtracting(preferred).sorted()
+        let preferred = ["Cinematic", "Social", "Clean", "Daily", "Essentials", "Movies", "Dark", "Kamera", "Özel"]
+        return ["Favoriler"] + preferred.filter { available.contains($0) } + available.subtracting(preferred).sorted()
     }
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
     init(project: GradeProject) { _project = State(initialValue: project) }
@@ -384,10 +760,15 @@ struct EditorView: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showingExportSettings = true } label: { Image(systemName: "slider.horizontal.3") }
                         .accessibilityLabel("Dışa aktarma ayarları")
+                    Button { showingPresets = true } label: { Image(systemName: "square.stack.3d.up") }
+                        .accessibilityLabel("Düzenleme presetleri")
                     Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }
-                    Button { saveToPhotos() } label: { exportButtonLabel }
-                        .accessibilityLabel("Dışa aktar")
-                        .disabled(isExporting)
+                    Menu {
+                        Button { exportToPhotos() } label: { Label("Fotoğraflar’a kaydet", systemImage: "photo") }
+                        Button { exportToFiles() } label: { Label("Dosyalar’a aktar", systemImage: "folder") }
+                    } label: { exportButtonLabel }
+                    .accessibilityLabel("Dışa aktar")
+                    .disabled(isExporting)
                 }
             }
             .onAppear(perform: prepareEditor)
@@ -400,20 +781,36 @@ struct EditorView: View {
                 redoStack.removeAll()
             }
             .onChange(of: project.settings.lutName) { _, name in
-                if name == "Original" { importedLUT = nil }
+                if name == "Original" { importedLUT = nil; project.settings.customLUTFileName = nil }
                 else if let match = bundledLUTs.first(where: { $0.1 == name }) { importedLUT = CubeLUT.load(url: match.2) }
                 updateVideoComposition()
             }
+            .onChange(of: project.settings.customLUTFileName) { _, fileName in
+                if let url = CustomLUTStore.url(for: fileName) { importedLUT = CubeLUT.load(url: url) }
+                updateVideoComposition()
+            }
+            .onChange(of: favoriteLUTNames) { _, names in UserDefaults.standard.set(Array(names), forKey: "lumagrade.favoriteLUTs") }
             .onChange(of: project.settings.source) { _, source in
                 sourceLUT = CubeLUT.sourceTransform(for: source, bundled: bundledLUTs)
                 updateVideoComposition()
             }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!]) { result in
-                if case let .success(url) = result {
-                    guard let lut = CubeLUT.load(url: url) else { lutLoadError = "Bu LUT dosyası okunamadı. .cube dosyasının geçerli bir 3D LUT olduğundan emin olun."; return }
-                    importedLUT = lut
-                    project.settings.lutName = url.deletingPathExtension().lastPathComponent
+            .fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!], allowsMultipleSelection: true) { result in
+                if case let .success(urls) = result {
+                    do {
+                        guard let url = urls.first else { return }
+                        let stored = try CustomLUTStore.importFile(url)
+                        guard let lut = CubeLUT.load(url: stored) else { throw MediaImportError.invalidLUT }
+                        bundledLUTs.append(("Özel", stored.deletingPathExtension().lastPathComponent, stored))
+                        importedLUT = lut
+                        project.settings.customLUTFileName = stored.lastPathComponent
+                        project.settings.lutName = stored.deletingPathExtension().lastPathComponent
+                    } catch { lutLoadError = "LUT içe aktarılamadı: \(error.localizedDescription)" }
                 }
+            }
+            .sheet(isPresented: $showingPresets) { PresetManagerView(settings: $project.settings) }
+            .sheet(isPresented: $showingFileExportPicker, onDismiss: cleanupFileExports) {
+                DocumentExportPicker(urls: fileExportURLs, isPresented: $showingFileExportPicker)
+                    .ignoresSafeArea()
             }
             .sheet(isPresented: $showingExportSettings) {
                 ExportSettingsView(settings: $project.settings, videoDuration: videoDuration)
@@ -505,8 +902,9 @@ struct EditorView: View {
         .foregroundStyle(.white)
     }
     private func prepareEditor() {
-        bundledLUTs = CubeLUT.loadBundled()
-        if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) }
+        bundledLUTs = CubeLUT.loadBundled() + CustomLUTStore.loadAll()
+        if let url = CustomLUTStore.url(for: project.settings.customLUTFileName) { importedLUT = CubeLUT.load(url: url) }
+        else if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) }
         sourceLUT = CubeLUT.sourceTransform(for: project.settings.source, bundled: bundledLUTs)
         if bundledLUTs.isEmpty { lutLoadError = "Uygulama paketinde LUT bulunamadı. Filtre dosyaları yüklenemedi." }
         isFavorite = UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteProjects")?.contains(project.id.uuidString) ?? false
@@ -557,38 +955,54 @@ struct EditorView: View {
     @ViewBuilder private var panel: some View {
         switch tab {
         case 0:
-            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
+            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, customLUTFileName: $project.settings.customLUTFileName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, favoriteNames: $favoriteLUTNames, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
         case 1:
-            AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration)
+            AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration, previewImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT)
         default:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
         }
     }
-    private func saveToPhotos() {
-        if isVideo { exportTrimmedVideo(); return }
+    private func exportToPhotos() {
+        if isVideo { exportTrimmedVideo(toPhotos: true) }
+        else { exportStill(toPhotos: true) }
+    }
+    private func exportToFiles() {
+        if isVideo { exportTrimmedVideo(toPhotos: false) }
+        else { exportStill(toPhotos: false) }
+    }
+    @MainActor private func exportStill(toPhotos: Bool) {
         guard let image = library.image(for: project) else { return }
         let settings = project.settings; let lut = importedLUT; let profileLUT = sourceLUT
-        isExporting = true; exportProgress = 0.05
+        isExporting = true; exportProgress = 0.04
         Task { @MainActor in
-            await Task.yield()
-            let output = await Task.detached(priority: .userInitiated) {
-                let graded = ImageRenderer.grade(image, settings: settings, lut: lut, sourceLUT: profileLUT)
-                return ImageRenderer.resized(graded, resolution: settings.exportResolution)
-            }.value
-            exportProgress = 0.8
-            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-                guard status == .authorized || status == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
-                PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } completionHandler: { saved, error in
-                    DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Fotoğraf arşive kaydedildi." : (error?.localizedDescription ?? "Fotoğraf kaydedilemedi.") }
+            do {
+                await Task.yield()
+                let output = await Task.detached(priority: .userInitiated) {
+                    let graded = ImageRenderer.grade(image, settings: settings, lut: lut, sourceLUT: profileLUT)
+                    return ImageRenderer.resized(graded, resolution: settings.exportResolution)
+                }.value
+                exportProgress = 0.8
+                if toPhotos {
+                    PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                        guard status == .authorized || status == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+                        PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } completionHandler: { saved, error in
+                            DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Fotoğraf arşive kaydedildi." : (error?.localizedDescription ?? "Fotoğraf kaydedilemedi.") }
+                        }
+                    }
+                } else {
+                    guard let data = output.jpegData(compressionQuality: 0.98) else { throw CocoaError(.fileWriteUnknown) }
+                    let url = FileManager.default.temporaryDirectory.appendingPathComponent("LumaGrade-\(UUID().uuidString).jpg")
+                    try data.write(to: url, options: .atomic)
+                    fileExportURLs = [url]; isExporting = false; exportProgress = 1; showingFileExportPicker = true
                 }
-            }
+            } catch { isExporting = false; exportProgress = 0; exportMessage = error.localizedDescription }
         }
     }
-    @MainActor private func exportTrimmedVideo() {
+    @MainActor private func exportTrimmedVideo(toPhotos: Bool) {
         let asset = AVURLAsset(url: library.videoURL(for: project))
-        Task { await exportVideo(asset) }
+        Task { await exportVideo(asset, toPhotos: toPhotos) }
     }
-    @MainActor private func exportVideo(_ asset: AVAsset) async {
+    @MainActor private func exportVideo(_ asset: AVAsset, toPhotos: Bool) async {
         do {
                 isExporting = true; exportProgress = 0.02
                 let duration = CMTimeGetSeconds(try await asset.load(.duration))
@@ -617,14 +1031,22 @@ struct EditorView: View {
                 }
                 progressTask.cancel()
                 guard status == .completed else { throw session.error ?? CocoaError(.fileWriteUnknown) }
-                PHPhotoLibrary.requestAuthorization(for: .addOnly) { authorization in
-                    guard authorization == .authorized || authorization == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
-                    PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: output) } completionHandler: { saved, error in
-                        try? FileManager.default.removeItem(at: output)
-                        DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Düzenlenmiş video arşive kaydedildi." : (error?.localizedDescription ?? "Video kaydedilemedi.") }
+                if toPhotos {
+                    PHPhotoLibrary.requestAuthorization(for: .addOnly) { authorization in
+                        guard authorization == .authorized || authorization == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+                        PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: output) } completionHandler: { saved, error in
+                            try? FileManager.default.removeItem(at: output)
+                            DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Düzenlenmiş video arşive kaydedildi." : (error?.localizedDescription ?? "Video kaydedilemedi.") }
+                        }
                     }
+                } else {
+                    fileExportURLs = [output]; isExporting = false; exportProgress = 1; showingFileExportPicker = true
                 }
         } catch { isExporting = false; exportProgress = 0; exportMessage = error.localizedDescription }
+    }
+    private func cleanupFileExports() {
+        for url in fileExportURLs { try? FileManager.default.removeItem(at: url) }
+        fileExportURLs.removeAll()
     }
     private var effectiveBitrateMbps: Double {
         if project.settings.exportBitrateMode == "El ile" { return project.settings.exportBitrateMbps }
@@ -746,6 +1168,62 @@ struct ExportSettingsView: View {
     }
 }
 
+fileprivate struct HistogramSnapshot: Equatable {
+    var bins: [Int] = Array(repeating: 0, count: 48)
+    var shadowClipping = 0.0
+    var highlightClipping = 0.0
+}
+
+private struct LumaHistogramView: View {
+    let image: UIImage?
+    let settings: GradeSettings
+    let lut: CubeLUT?
+    let sourceLUT: CubeLUT?
+    @State private var snapshot = HistogramSnapshot()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("Pozlama kapsamı").font(.system(size: 10, weight: .semibold))
+                Spacer()
+                if snapshot.highlightClipping > 0.02 {
+                    Label("Parlak alan kırpılıyor", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                } else if snapshot.shadowClipping > 0.08 {
+                    Label("Gölgeler eziliyor", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                } else {
+                    Text("Işık dağılımı").foregroundStyle(.secondary)
+                }
+            }
+            Canvas { context, size in
+                let maximum = max(1, snapshot.bins.max() ?? 1)
+                let columnWidth = size.width / CGFloat(snapshot.bins.count)
+                for index in snapshot.bins.indices {
+                    let height = CGFloat(snapshot.bins[index]) / CGFloat(maximum) * size.height
+                    let rect = CGRect(x: CGFloat(index) * columnWidth, y: size.height - height, width: max(1, columnWidth - 1), height: height)
+                    context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(index < 3 || index > 44 ? .orange.opacity(0.85) : accent.opacity(0.9)))
+                }
+            }
+            .frame(height: 48)
+            HStack {
+                Text("SİYAH").foregroundStyle(.secondary)
+                Spacer()
+                Text("BEYAZ").foregroundStyle(.secondary)
+            }
+            .font(.system(size: 7, weight: .medium))
+        }
+        .padding(10)
+        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+        .task(id: settings) {
+            guard let image else { snapshot = HistogramSnapshot(); return }
+            let capturedLUT = lut; let capturedSourceLUT = sourceLUT; let capturedSettings = settings
+            let result = await Task.detached(priority: .utility) {
+                ImageRenderer.histogram(image, settings: capturedSettings, lut: capturedLUT, sourceLUT: capturedSourceLUT)
+            }.value
+            snapshot = result
+        }
+    }
+}
+
 private enum AdjustmentControl: String, CaseIterable, Identifiable {
     case auto = "Otomatik", brilliance = "Pırıldama", exposure = "Pozlama", shadows = "Gölgeler", highlights = "Açık alanlar", whites = "Beyazlar", blacks = "Siyahlar", blackPoint = "Siyah noktası"
     case temperature = "Sıcaklık", tint = "Tint", contrast = "Kontrast", hue = "Hue", lightness = "HLS Açıklık"
@@ -829,6 +1307,9 @@ struct AdjustmentPanel: View {
     @Binding var settings: GradeSettings
     var isVideo = false
     var videoDuration = 0.0
+    var previewImage: UIImage?
+    var lut: CubeLUT?
+    var sourceLUT: CubeLUT?
     @State private var selected: AdjustmentControl = .exposure
 
     private var value: Binding<Double> {
@@ -849,6 +1330,7 @@ struct AdjustmentPanel: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 13) {
+                LumaHistogramView(image: previewImage, settings: settings, lut: lut, sourceLUT: sourceLUT)
                 HStack {
                     Label("Kaynak profili", systemImage: "camera.aperture").font(.system(size: 11, weight: .medium))
                     Spacer(minLength: 8)
@@ -956,39 +1438,61 @@ struct FilterBrowser: View {
     let categories: [String]
     @Binding var selectedCategory: String
     @Binding var selectedName: String
+    @Binding var customLUTFileName: String?
     @Binding var selectedLUT: CubeLUT?
     @Binding var intensity: Double
+    @Binding var favoriteNames: Set<String>
     let sourceImage: UIImage?
     let settings: GradeSettings
     let sourceLUT: CubeLUT?
     @Binding var loadError: String?
-    private var visibleItems: [(String, String, URL)] { items.filter { $0.0 == selectedCategory } }
+    @State private var searchText = ""
+    @State private var isSearching = false
+    private var visibleItems: [(String, String, URL)] {
+        items.filter { item in
+            let inCategory = selectedCategory == "Favoriler" ? favoriteNames.contains(item.1) : item.0 == selectedCategory
+            return inCategory && (searchText.isEmpty || item.1.localizedCaseInsensitiveContains(searchText))
+        }
+    }
     private var tileWidth: CGFloat { min(max(UIScreen.main.bounds.width * 0.38, 136), 286) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(categories, id: \.self) { name in
-                        Button { selectedCategory = name } label: {
-                            HStack(spacing: 7) {
-                                Text(name)
-                                if selectedCategory == name { Circle().fill(.black).frame(width: 8, height: 8) }
+            HStack(spacing: 6) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(categories, id: \.self) { name in
+                            Button { selectedCategory = name } label: {
+                                HStack(spacing: 7) {
+                                    Text(name)
+                                    if selectedCategory == name { Circle().fill(.black).frame(width: 8, height: 8) }
+                                }
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(selectedCategory == name ? .black : .white)
+                                .padding(.horizontal, selectedCategory == name ? 15 : 11).padding(.vertical, 10)
+                                .background(selectedCategory == name ? accent : .clear, in: Capsule())
                             }
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(selectedCategory == name ? .black : .white)
-                            .padding(.horizontal, selectedCategory == name ? 15 : 11).padding(.vertical, 10)
-                            .background(selectedCategory == name ? accent : .clear, in: Capsule())
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+                Button { withAnimation(.easeInOut(duration: 0.18)) { isSearching.toggle(); if !isSearching { searchText = "" } } } label: {
+                    Image(systemName: isSearching ? "xmark" : "magnifyingglass")
+                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 34, height: 34).background(.white.opacity(0.08), in: Circle())
+                }.buttonStyle(.plain)
             }
             .frame(height: 45)
+            if isSearching {
+                TextField("LUT ara", text: $searchText)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .padding(.horizontal, 12).frame(height: 38)
+                    .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 14) {
-                    Button { selectedLUT = nil; selectedName = "Original" } label: {
-                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, sourceLUT: sourceLUT, selected: selectedName == "Original", width: tileWidth)
+                    Button { selectedLUT = nil; selectedName = "Original"; customLUTFileName = nil } label: {
+                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, sourceLUT: sourceLUT, selected: selectedName == "Original", favorite: false, width: tileWidth)
                     }.buttonStyle(.plain)
                     ForEach(Array(visibleItems.enumerated()), id: \.offset) { pair in
                         let item = pair.element
@@ -999,9 +1503,22 @@ struct FilterBrowser: View {
                             }
                             selectedLUT = lut
                             selectedName = item.1
+                            customLUTFileName = item.0 == "Özel" ? item.2.lastPathComponent : nil
                         } label: {
-                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), sourceLUT: sourceLUT, selected: selectedName == item.1, width: tileWidth)
+                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), sourceLUT: sourceLUT, selected: selectedName == item.1, favorite: favoriteNames.contains(item.1), width: tileWidth)
                         }.buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                if favoriteNames.contains(item.1) { favoriteNames.remove(item.1) }
+                                else { favoriteNames.insert(item.1) }
+                            } label: {
+                                Label(favoriteNames.contains(item.1) ? "Favorilerden çıkar" : "Favorilere ekle", systemImage: favoriteNames.contains(item.1) ? "heart.slash" : "heart")
+                            }
+                        }
+                    }
+                    if visibleItems.isEmpty {
+                        ContentUnavailableView(selectedCategory == "Favoriler" ? "Henüz favori LUT yok" : "LUT bulunamadı", systemImage: "cube.transparent", description: Text(selectedCategory == "Favoriler" ? "Bir LUT kartına basılı tutup favorilere ekleyin." : "Arama veya kategori seçimini değiştirin."))
+                            .frame(width: tileWidth * 1.5, height: 150)
                     }
                 }
             }
@@ -1023,17 +1540,24 @@ struct LUTTile: View {
     let lut: CubeLUT?
     let sourceLUT: CubeLUT?
     let selected: Bool
+    let favorite: Bool
     let width: CGFloat
     var body: some View {
         VStack(spacing: 0) {
-            Group {
+            ZStack(alignment: .topTrailing) {
+                Group {
                 if let sourceImage {
                     Image(uiImage: ImageRenderer.thumbnail(sourceImage, settings: settings, lut: lut, sourceLUT: sourceLUT)).resizable().scaledToFill()
                 } else {
                     LinearGradient(colors: [.purple, .orange, accent], startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
+                }
+                .frame(width: width, height: min(width * 0.96, 250)).clipped()
+                if favorite {
+                    Image(systemName: "heart.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.pink)
+                        .padding(7).background(.black.opacity(0.65), in: Circle()).padding(8)
+                }
             }
-            .frame(width: width, height: min(width * 0.96, 250)).clipped()
             Text(name)
                 .font(.system(size: 14, weight: .bold, design: .rounded)).lineLimit(1)
                 .foregroundStyle(selected ? .black : .white)
@@ -1044,6 +1568,81 @@ struct LUTTile: View {
         .background(Color(red: 0.105, green: 0.105, blue: 0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(selected ? accent.opacity(0.75) : .white.opacity(0.08), lineWidth: selected ? 1.5 : 1))
+    }
+}
+
+struct GradePreset: Codable, Identifiable {
+    var id = UUID()
+    var name: String
+    var settings: GradeSettings
+    static let storageKey = "lumagrade.savedPresets.v1"
+    static func loadAll() -> [GradePreset] {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let presets = try? JSONDecoder().decode([GradePreset].self, from: data) else { return [] }
+        return presets
+    }
+    static func save(_ presets: [GradePreset]) {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
+    }
+}
+
+struct PresetManagerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var settings: GradeSettings
+    @State private var presets = GradePreset.loadAll()
+    @State private var presetName = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Geçerli ayarları kaydet") {
+                    HStack(spacing: 10) {
+                        TextField("Preset adı", text: $presetName)
+                        Button("Kaydet", action: savePreset)
+                            .disabled(presetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                Section("Presetlerim") {
+                    if presets.isEmpty {
+                        ContentUnavailableView("Henüz preset yok", systemImage: "square.stack.3d.up", description: Text("Sık kullandığın renk ayarlarını kaydet."))
+                    } else {
+                        ForEach(presets) { preset in
+                            Button {
+                                settings = preset.settings
+                                dismiss()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(preset.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                                    Text("\(preset.settings.lutName) · \(Int(preset.settings.intensity))%")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .swipeActions {
+                                Button(role: .destructive) { delete(preset) } label: { Label("Sil", systemImage: "trash") }
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.black)
+            .navigationTitle("Presetler")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Bitti") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+    private func savePreset() {
+        let name = presetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        presets.insert(GradePreset(name: name, settings: settings), at: 0)
+        GradePreset.save(presets)
+        presetName = ""
+    }
+    private func delete(_ preset: GradePreset) {
+        presets.removeAll { $0.id == preset.id }
+        GradePreset.save(presets)
     }
 }
 
@@ -1158,6 +1757,39 @@ enum ImageRenderer { static let context = CIContext()
             source.draw(in: rect)
         }
         return grade(small, settings: settings, lut: lut, sourceLUT: sourceLUT)
+    }
+    fileprivate static func histogram(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?, sourceLUT: CubeLUT?) -> HistogramSnapshot {
+        guard let input = CIImage(image: source) else { return HistogramSnapshot() }
+        let graded = grade(input, settings: settings, lut: lut, sourceLUT: sourceLUT)
+        let longest = max(graded.extent.width, graded.extent.height)
+        let scale = min(1, 160 / max(1, longest))
+        let reduced = graded.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let rendered = context.createCGImage(reduced, from: reduced.extent, format: .RGBA8, colorSpace: colorSpace),
+              let data = rendered.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return HistogramSnapshot() }
+        var snapshot = HistogramSnapshot()
+        var shadows = 0
+        var highlights = 0
+        var samples = 0
+        for y in 0..<rendered.height {
+            for x in 0..<rendered.width {
+                let offset = y * rendered.bytesPerRow + x * 4
+                let red = Double(bytes[offset]) / 255
+                let green = Double(bytes[offset + 1]) / 255
+                let blue = Double(bytes[offset + 2]) / 255
+                let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+                let bin = min(snapshot.bins.count - 1, max(0, Int(luma * Double(snapshot.bins.count))))
+                snapshot.bins[bin] += 1
+                if luma < 0.01 { shadows += 1 }
+                if luma > 0.99 { highlights += 1 }
+                samples += 1
+            }
+        }
+        guard samples > 0 else { return snapshot }
+        snapshot.shadowClipping = Double(shadows) / Double(samples)
+        snapshot.highlightClipping = Double(highlights) / Double(samples)
+        return snapshot
     }
     static func rgbaData(from rgb: [Float], dimension: Int) -> Data {
         // Resolve .cube data already varies red fastest, as CIColorCube expects.
