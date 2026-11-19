@@ -5,6 +5,24 @@
   A002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102; };
   A003 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = A106; };
   A004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A107; };
+  C001 /* Icon-20@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D001; };
+  C002 /* Icon-20@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = D002; };
+  C003 /* Icon-29@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D003; };
+  C004 /* Icon-29@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = D004; };
+  C005 /* Icon-40@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D005; };
+  C006 /* Icon-40@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = D006; };
+  C007 /* Icon-60@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D007; };
+  C008 /* Icon-60@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = D008; };
+  C009 /* Icon-iPad-20.png in Resources */ = {isa = PBXBuildFile; fileRef = D009; };
+  C00A /* Icon-iPad-20@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D00A; };
+  C00B /* Icon-iPad-29.png in Resources */ = {isa = PBXBuildFile; fileRef = D00B; };
+  C00C /* Icon-iPad-29@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D00C; };
+  C00D /* Icon-iPad-40.png in Resources */ = {isa = PBXBuildFile; fileRef = D00D; };
+  C00E /* Icon-iPad-40@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D00E; };
+  C00F /* Icon-iPad-76.png in Resources */ = {isa = PBXBuildFile; fileRef = D00F; };
+  C010 /* Icon-iPad-76@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D010; };
+  C011 /* Icon-iPad-83.5@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D011; };
+  C012 /* AppIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = D012; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
   A101 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaGradeApp.swift; sourceTree = "<group>"; };
@@ -14,10 +32,28 @@
   A105 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LumaGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
   A106 = {isa = PBXFileReference; lastKnownFileType = folder; path = LUTs; sourceTree = "<group>"; };
   A107 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+  D001 /* Icon-20@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-20@2x.png; sourceTree = "<group>"; };
+  D002 /* Icon-20@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-20@3x.png; sourceTree = "<group>"; };
+  D003 /* Icon-29@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-29@2x.png; sourceTree = "<group>"; };
+  D004 /* Icon-29@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-29@3x.png; sourceTree = "<group>"; };
+  D005 /* Icon-40@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-40@2x.png; sourceTree = "<group>"; };
+  D006 /* Icon-40@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-40@3x.png; sourceTree = "<group>"; };
+  D007 /* Icon-60@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-60@2x.png; sourceTree = "<group>"; };
+  D008 /* Icon-60@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-60@3x.png; sourceTree = "<group>"; };
+  D009 /* Icon-iPad-20.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-20.png; sourceTree = "<group>"; };
+  D00A /* Icon-iPad-20@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-20@2x.png; sourceTree = "<group>"; };
+  D00B /* Icon-iPad-29.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-29.png; sourceTree = "<group>"; };
+  D00C /* Icon-iPad-29@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-29@2x.png; sourceTree = "<group>"; };
+  D00D /* Icon-iPad-40.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-40.png; sourceTree = "<group>"; };
+  D00E /* Icon-iPad-40@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-40@2x.png; sourceTree = "<group>"; };
+  D00F /* Icon-iPad-76.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-76.png; sourceTree = "<group>"; };
+  D010 /* Icon-iPad-76@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-76@2x.png; sourceTree = "<group>"; };
+  D011 /* Icon-iPad-83.5@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon-iPad-83.5@2x.png; sourceTree = "<group>"; };
+  D012 /* AppIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon.png; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXGroup section */
   A201 = {isa = PBXGroup; children = (A202, A203); sourceTree = "<group>"; };
-  A202 = {isa = PBXGroup; children = (A101, A102, A103, A104, A106, A107); path = LumaGrade; sourceTree = "<group>"; };
+  A202 = {isa = PBXGroup; children = (A101, A102, A103, A104, A106, A107, D001, D002, D003, D004, D005, D006, D007, D008, D009, D00A, D00B, D00C, D00D, D00E, D00F, D010, D011, D012); path = LumaGrade; sourceTree = "<group>"; };
   A203 = {isa = PBXGroup; children = (A105); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
@@ -27,7 +63,7 @@
   A601 = {isa = PBXProject; attributes = { LastUpgradeCheck = 1500; TargetAttributes = { A301 = { CreatedOnToolsVersion = 15.0; }; }; }; buildConfigurationList = A402; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A201; productRefGroup = A203; projectDirPath = ""; projectRoot = ""; targets = (A301); };
 /* End PBXProject section */
 /* Begin PBXResourcesBuildPhase section */
-  A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A003, A004); runOnlyForDeploymentPostprocessing = 0; };
+  A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A003, A004, C001, C002, C003, C004, C005, C006, C007, C008, C009, C00A, C00B, C00C, C00D, C00E, C00F, C010, C011, C012); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
   A502 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A001, A002); runOnlyForDeploymentPostprocessing = 0; };

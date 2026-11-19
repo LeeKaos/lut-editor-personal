@@ -4,6 +4,37 @@
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleDisplayName</key><string>LutEditor</string>
   <key>CFBundleIconName</key><string>AppIcon</string>
+  <key>CFBundleIcons</key><dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconFiles</key><array>
+      <string>Icon-20@2x</string>
+      <string>Icon-20@3x</string>
+      <string>Icon-29@2x</string>
+      <string>Icon-29@3x</string>
+      <string>Icon-40@2x</string>
+      <string>Icon-40@3x</string>
+      <string>Icon-60@2x</string>
+      <string>Icon-60@3x</string>
+      <string>Icon-iPad-20</string>
+      <string>Icon-iPad-20@2x</string>
+      <string>Icon-iPad-29</string>
+      <string>Icon-iPad-29@2x</string>
+      <string>Icon-iPad-40</string>
+      <string>Icon-iPad-40@2x</string>
+      <string>Icon-iPad-76</string>
+      <string>Icon-iPad-76@2x</string>
+      <string>Icon-iPad-83.5@2x</string>
+      <string>AppIcon</string>
+    </array><key>CFBundleIconName</key><string>AppIcon</string></dict></dict>
+  <key>CFBundleIcons~ipad</key><dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconFiles</key><array>
+      <string>Icon-iPad-20</string>
+      <string>Icon-iPad-20@2x</string>
+      <string>Icon-iPad-29</string>
+      <string>Icon-iPad-29@2x</string>
+      <string>Icon-iPad-40</string>
+      <string>Icon-iPad-40@2x</string>
+      <string>Icon-iPad-76</string>
+      <string>Icon-iPad-76@2x</string>
+      <string>Icon-iPad-83.5@2x</string>
+    </array><key>CFBundleIconName</key><string>AppIcon</string></dict></dict>
   <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
   <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
