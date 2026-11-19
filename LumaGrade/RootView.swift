@@ -343,12 +343,16 @@ private struct MediaProjectThumbnail: View {
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
     @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
-    @State private var lutLoadError: String?
+    @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
     @State private var isExporting = false; @State private var exportProgress = 0.0
     private var isVideo: Bool { ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased()) }
-    private var lutCategories: [String] { ["Tümü"] + Array(Set(bundledLUTs.map { $0.0 })).sorted() }
+    private var lutCategories: [String] {
+        let available = Set(bundledLUTs.map { $0.0 })
+        let preferred = ["Cinematic", "Social", "Clean", "Daily", "Essentials", "Movies", "Dark", "Kamera"]
+        return preferred.filter { available.contains($0) } + available.subtracting(preferred).sorted()
+    }
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
     init(project: GradeProject) { _project = State(initialValue: project) }
     var body: some View {
@@ -358,12 +362,15 @@ struct EditorView: View {
                     .frame(height: 330)
                     .padding(.horizontal, 12)
                 previewActions
-                HStack(spacing: 5) {
+                HStack(spacing: 0) {
                     editorTab("Filtreler", symbol: "camera.filters", value: 0)
                     editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
                     editorTab("Efektler", symbol: "sparkles", value: 2)
                 }
-                .padding(5).background(Color.white.opacity(0.07), in: Capsule()).padding(.horizontal, 20).padding(.vertical, 10)
+                .padding(4)
+                .background(Color(red: 0.27, green: 0.27, blue: 0.29), in: Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1))
+                .padding(.horizontal, 18).padding(.vertical, 10)
                 panel.padding(.horizontal).padding(.bottom, 8)
             }
             .background(Color.black)
@@ -432,11 +439,11 @@ struct EditorView: View {
     private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
         Button { tab = value } label: {
             Label(title, systemImage: symbol)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 15, weight: tab == value ? .bold : .regular, design: .rounded))
                 .labelStyle(.titleAndIcon)
-                .foregroundStyle(tab == value ? .black : .white.opacity(0.75))
-                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                .background(tab == value ? accent : .clear, in: Capsule())
+                .foregroundStyle(tab == value ? .black : .white.opacity(0.94))
+                .frame(maxWidth: .infinity).frame(height: 44)
+                .background(tab == value ? Color.white : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -510,8 +517,12 @@ struct EditorView: View {
             videoPlayer = AVPlayer(playerItem: item)
             Task {
                 if let duration = try? await asset.load(.duration) {
-                    await MainActor.run { videoDuration = CMTimeGetSeconds(duration) }
+                    videoDuration = CMTimeGetSeconds(duration)
                 }
+                let generator = AVAssetImageGenerator(asset: asset)
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = CGSize(width: 720, height: 720)
+                if let (frame, _) = try? await generator.image(at: .zero) { sourcePreviewImage = UIImage(cgImage: frame) }
             }
         }
     }
@@ -546,7 +557,7 @@ struct EditorView: View {
     @ViewBuilder private var panel: some View {
         switch tab {
         case 0:
-            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
+            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
         case 1:
             AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration)
         default:
@@ -951,26 +962,33 @@ struct FilterBrowser: View {
     let settings: GradeSettings
     let sourceLUT: CubeLUT?
     @Binding var loadError: String?
-    private var visibleItems: [(String, String, URL)] { selectedCategory == "Tümü" ? items : items.filter { $0.0 == selectedCategory } }
+    private var visibleItems: [(String, String, URL)] { items.filter { $0.0 == selectedCategory } }
+    private var tileWidth: CGFloat { min(max(UIScreen.main.bounds.width * 0.38, 136), 286) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack { Text("Filtreler").font(.headline); Spacer(); Text("Yoğunluk  \(Int(intensity))% ").font(.caption).foregroundStyle(.secondary) }
+        VStack(alignment: .leading, spacing: 13) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     ForEach(categories, id: \.self) { name in
-                        Button(name) { selectedCategory = name }
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(selectedCategory == name ? accent : Color.white.opacity(0.08), in: Capsule())
+                        Button { selectedCategory = name } label: {
+                            HStack(spacing: 7) {
+                                Text(name)
+                                if selectedCategory == name { Circle().fill(.black).frame(width: 8, height: 8) }
+                            }
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
                             .foregroundStyle(selectedCategory == name ? .black : .white)
+                            .padding(.horizontal, selectedCategory == name ? 15 : 11).padding(.vertical, 10)
+                            .background(selectedCategory == name ? accent : .clear, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
+            .frame(height: 45)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 10) {
+                LazyHStack(spacing: 14) {
                     Button { selectedLUT = nil; selectedName = "Original" } label: {
-                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, sourceLUT: sourceLUT, selected: selectedName == "Original")
+                        LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, sourceLUT: sourceLUT, selected: selectedName == "Original", width: tileWidth)
                     }.buttonStyle(.plain)
                     ForEach(Array(visibleItems.enumerated()), id: \.offset) { pair in
                         let item = pair.element
@@ -982,15 +1000,19 @@ struct FilterBrowser: View {
                             selectedLUT = lut
                             selectedName = item.1
                         } label: {
-                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), sourceLUT: sourceLUT, selected: selectedName == item.1)
+                            LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), sourceLUT: sourceLUT, selected: selectedName == item.1, width: tileWidth)
                         }.buttonStyle(.plain)
                     }
                 }
             }
-            Slider(value: $intensity, in: 0...100)
-                .tint(accent)
-                .disabled(selectedLUT == nil)
+            HStack(spacing: 16) {
+                Text("Yoğunluk").font(.system(size: 16, weight: .regular, design: .rounded)).frame(width: 92, alignment: .leading)
+                Slider(value: $intensity, in: 0...100).tint(.white).disabled(selectedLUT == nil)
+                Text("\(Int(intensity.rounded()))%").font(.system(size: 12, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(.white.opacity(0.6)).frame(width: 38, alignment: .trailing)
+            }
+            .foregroundStyle(.white)
         }
+        .padding(.top, 3)
     }
 }
 
@@ -1001,8 +1023,9 @@ struct LUTTile: View {
     let lut: CubeLUT?
     let sourceLUT: CubeLUT?
     let selected: Bool
+    let width: CGFloat
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(spacing: 0) {
             Group {
                 if let sourceImage {
                     Image(uiImage: ImageRenderer.thumbnail(sourceImage, settings: settings, lut: lut, sourceLUT: sourceLUT)).resizable().scaledToFill()
@@ -1010,12 +1033,17 @@ struct LUTTile: View {
                     LinearGradient(colors: [.purple, .orange, accent], startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
             }
-            .frame(width: 92, height: 58).clipped().clipShape(RoundedRectangle(cornerRadius: 8))
-            Text(name).font(.caption2).lineLimit(1).frame(width: 92, alignment: .leading)
+            .frame(width: width, height: min(width * 0.96, 250)).clipped()
+            Text(name)
+                .font(.system(size: 14, weight: .bold, design: .rounded)).lineLimit(1)
+                .foregroundStyle(selected ? .black : .white)
+                .frame(width: width, height: 45)
+                .background(selected ? accent : Color(red: 0.105, green: 0.105, blue: 0.12))
         }
-        .padding(5)
-        .background(selected ? accent.opacity(0.2) : Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11))
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(selected ? accent : .clear, lineWidth: 1.5))
+        .frame(width: width)
+        .background(Color(red: 0.105, green: 0.105, blue: 0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(selected ? accent.opacity(0.75) : .white.opacity(0.08), lineWidth: selected ? 1.5 : 1))
     }
 }
 
@@ -1123,7 +1151,12 @@ enum ImageRenderer { static let context = CIContext()
     static func thumbnail(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?, sourceLUT: CubeLUT? = nil) -> UIImage {
         let target = CGSize(width: 180, height: 112)
         let renderer = UIGraphicsImageRenderer(size: target)
-        let small = renderer.image { _ in source.draw(in: CGRect(origin: .zero, size: target)) }
+        let small = renderer.image { _ in
+            let scale = max(target.width / source.size.width, target.height / source.size.height)
+            let size = CGSize(width: source.size.width * scale, height: source.size.height * scale)
+            let rect = CGRect(x: (target.width - size.width) / 2, y: (target.height - size.height) / 2, width: size.width, height: size.height)
+            source.draw(in: rect)
+        }
         return grade(small, settings: settings, lut: lut, sourceLUT: sourceLUT)
     }
     static func rgbaData(from rgb: [Float], dimension: Int) -> Data {
