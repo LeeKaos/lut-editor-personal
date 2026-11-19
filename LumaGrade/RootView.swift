@@ -367,23 +367,7 @@ struct EditorView: View {
                 panel.padding(.horizontal).padding(.bottom, 8)
             }
             .background(Color.black)
-            .overlay {
-                if isExporting {
-                    ZStack {
-                        Color.black.opacity(0.72).ignoresSafeArea()
-                        VStack(spacing: 14) {
-                            ProgressView(value: exportProgress)
-                                .tint(accent).frame(width: 220)
-                            Text("Dışa aktarılıyor · %\(Int(exportProgress * 100))")
-                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                            Text(isVideo ? "Video hazırlanıyor, uygulamayı açık tutun." : "Fotoğraf işleniyor…")
-                                .font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
-                        }
-                        .padding(24).background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 18))
-                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.1), lineWidth: 1))
-                    }
-                }
-            }
+            .overlay { exportOverlay }
             .navigationTitle(project.settings.lutName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -394,7 +378,7 @@ struct EditorView: View {
                     Button { showingExportSettings = true } label: { Image(systemName: "slider.horizontal.3") }
                         .accessibilityLabel("Dışa aktarma ayarları")
                     Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }
-                    Button { saveToPhotos() } label: { isExporting ? ProgressView().tint(accent) : Image(systemName: "square.and.arrow.up") }
+                    Button { saveToPhotos() } label: { exportButtonLabel }
                         .accessibilityLabel("Dışa aktar")
                         .disabled(isExporting)
                 }
@@ -455,6 +439,26 @@ struct EditorView: View {
                 .background(tab == value ? accent : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+    @ViewBuilder private var exportOverlay: some View {
+        if isExporting {
+            ZStack {
+                Color.black.opacity(0.72).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    ProgressView(value: exportProgress).tint(accent).frame(width: 220)
+                    Text("Dışa aktarılıyor · %\(Int(exportProgress * 100))")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                    Text(isVideo ? "Video hazırlanıyor, uygulamayı açık tutun." : "Fotoğraf işleniyor…")
+                        .font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
+                }
+                .padding(24).background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.1), lineWidth: 1))
+            }
+        }
+    }
+    @ViewBuilder private var exportButtonLabel: some View {
+        if isExporting { ProgressView().tint(accent) }
+        else { Image(systemName: "square.and.arrow.up") }
     }
     private var preview: some View {
         Group {
@@ -569,11 +573,13 @@ struct EditorView: View {
             }
         }
     }
-    private func exportTrimmedVideo() {
+    @MainActor private func exportTrimmedVideo() {
         let asset = AVURLAsset(url: library.videoURL(for: project))
-        Task {
-            do {
-                await MainActor.run { isExporting = true; exportProgress = 0.02 }
+        Task { await exportVideo(asset) }
+    }
+    @MainActor private func exportVideo(_ asset: AVAsset) async {
+        do {
+                isExporting = true; exportProgress = 0.02
                 let duration = CMTimeGetSeconds(try await asset.load(.duration))
                 let start = min(duration, max(0, duration * project.settings.trimStart))
                 let end = min(duration, max(start + 0.05, duration * project.settings.trimEnd))
@@ -607,8 +613,7 @@ struct EditorView: View {
                         DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Düzenlenmiş video arşive kaydedildi." : (error?.localizedDescription ?? "Video kaydedilemedi.") }
                     }
                 }
-            } catch { await MainActor.run { isExporting = false; exportProgress = 0; exportMessage = error.localizedDescription } }
-        }
+        } catch { isExporting = false; exportProgress = 0; exportMessage = error.localizedDescription }
     }
     private var effectiveBitrateMbps: Double {
         if project.settings.exportBitrateMode == "El ile" { return project.settings.exportBitrateMbps }
