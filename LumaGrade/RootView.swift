@@ -715,7 +715,7 @@ private struct MediaProjectThumbnail: View {
 
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
-    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
+    @State private var project: GradeProject; @StateObject private var engineViewModel: EngineViewModel; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
     @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var showingPresets = false
@@ -730,7 +730,7 @@ struct EditorView: View {
         return ["Favoriler"] + preferred.filter { available.contains($0) } + available.subtracting(preferred).sorted()
     }
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
-    init(project: GradeProject) { _project = State(initialValue: project) }
+    init(project: GradeProject) { _project = State(initialValue: project); _engineViewModel = StateObject(wrappedValue: EngineViewModel()) }
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -743,6 +743,7 @@ struct EditorView: View {
                     editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
                     editorTab("Efektler", symbol: "sparkles", value: 2)
                     editorTab("Özel", symbol: "wand.and.stars", value: 3)
+                    editorTab("Engine", symbol: "cpu", value: 4)
                 }
                 .padding(4)
                 .background(Color(red: 0.27, green: 0.27, blue: 0.29), in: Capsule())
@@ -837,7 +838,7 @@ struct EditorView: View {
     private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
         Button { tab = value } label: {
             Label(title, systemImage: symbol)
-                .font(.system(size: 12, weight: tab == value ? .bold : .regular, design: .rounded))
+                .font(.system(size: 9, weight: tab == value ? .bold : .regular, design: .rounded))
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
                 .foregroundStyle(tab == value ? .black : .white.opacity(0.94))
@@ -962,8 +963,10 @@ struct EditorView: View {
             AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration, previewImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT)
         case 2:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
-        default:
+        case 3:
             AutoLookPanel(settings: $project.settings, sourceImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT, isVideo: isVideo)
+        default:
+            EngineView(viewModel: engineViewModel, inputImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT, isVideo: isVideo, onApplySettings: { project.settings = $0 })
         }
     }
     private func exportToPhotos() {
@@ -1090,7 +1093,7 @@ struct EditorView: View {
     }
 }
 
-fileprivate enum AutoLookStyle: String, CaseIterable, Identifiable {
+enum AutoLookStyle: String, CaseIterable, Identifiable {
     case automatic, cinematic, warm, vivid
     var id: String { rawValue }
     var title: String {
@@ -1879,7 +1882,7 @@ enum ImageRenderer { static let context = CIContext()
         var meanSaturation = 0.25
     }
 
-    fileprivate static func automaticLook(source: UIImage, lut: CubeLUT?, lutIntensity: Double, sourceLUT: CubeLUT?, style: AutoLookStyle) -> GradeSettings {
+    static func automaticLook(source: UIImage, lut: CubeLUT?, lutIntensity: Double, sourceLUT: CubeLUT?, style: AutoLookStyle) -> GradeSettings {
         let stats = autoLookStats(source: source, lut: lut, lutIntensity: lutIntensity, sourceLUT: sourceLUT)
         let targetLuma = 0.46
         var exposure = log2(targetLuma / max(0.035, stats.meanLuma)) * 0.48
