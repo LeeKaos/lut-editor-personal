@@ -742,6 +742,7 @@ struct EditorView: View {
                     editorTab("Filtreler", symbol: "camera.filters", value: 0)
                     editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
                     editorTab("Efektler", symbol: "sparkles", value: 2)
+                    editorTab("Özel", symbol: "wand.and.stars", value: 3)
                 }
                 .padding(4)
                 .background(Color(red: 0.27, green: 0.27, blue: 0.29), in: Capsule())
@@ -836,8 +837,9 @@ struct EditorView: View {
     private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
         Button { tab = value } label: {
             Label(title, systemImage: symbol)
-                .font(.system(size: 15, weight: tab == value ? .bold : .regular, design: .rounded))
+                .font(.system(size: 12, weight: tab == value ? .bold : .regular, design: .rounded))
                 .labelStyle(.titleAndIcon)
+                .lineLimit(1)
                 .foregroundStyle(tab == value ? .black : .white.opacity(0.94))
                 .frame(maxWidth: .infinity).frame(height: 44)
                 .background(tab == value ? Color.white : .clear, in: Capsule())
@@ -958,8 +960,10 @@ struct EditorView: View {
             FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, customLUTFileName: $project.settings.customLUTFileName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, favoriteNames: $favoriteLUTNames, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
         case 1:
             AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration, previewImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT)
-        default:
+        case 2:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
+        default:
+            AutoLookPanel(settings: $project.settings, sourceImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT, isVideo: isVideo)
         }
     }
     private func exportToPhotos() {
@@ -1083,6 +1087,125 @@ struct EditorView: View {
             if supported.contains(AVAssetExportPresetHighestQuality) { return AVAssetExportPresetHighestQuality }
         }
         return supported.first ?? AVAssetExportPresetHighestQuality
+    }
+}
+
+fileprivate enum AutoLookStyle: String, CaseIterable, Identifiable {
+    case automatic, cinematic, warm, vivid
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .automatic: return "Akıllı"
+        case .cinematic: return "Sinematik"
+        case .warm: return "Sıcak ışık"
+        case .vivid: return "Canlı"
+        }
+    }
+    var description: String {
+        switch self {
+        case .automatic: return "Sahneye göre dengeli renk"
+        case .cinematic: return "Derin gölge, yumuşak ışık"
+        case .warm: return "Gün batımı sıcaklığı"
+        case .vivid: return "Daha zengin doğal renkler"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .automatic: return "wand.and.stars"
+        case .cinematic: return "film"
+        case .warm: return "sun.horizon.fill"
+        case .vivid: return "leaf.fill"
+        }
+    }
+}
+
+private struct AutoLookPanel: View {
+    @Binding var settings: GradeSettings
+    let sourceImage: UIImage?
+    let lut: CubeLUT?
+    let sourceLUT: CubeLUT?
+    let isVideo: Bool
+    @State private var appliedStyle: AutoLookStyle?
+    @State private var message: String?
+
+    private let columns = [GridItem(.flexible(), spacing: 9), GridItem(.flexible(), spacing: 9)]
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "iphone.gen3.radiowaves.left.and.right")
+                        .foregroundStyle(accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Tek dokunuşla renk")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Bu iPhone’da işlenir · internet ve API gerekmez")
+                            .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                    }
+                    Spacer(minLength: 0)
+                }
+                LazyVGrid(columns: columns, spacing: 9) {
+                    ForEach(AutoLookStyle.allCases) { style in
+                        Button { apply(style) } label: {
+                            HStack(spacing: 9) {
+                                Image(systemName: style.symbol)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(appliedStyle == style ? .black : accent)
+                                    .frame(width: 30, height: 30)
+                                    .background(appliedStyle == style ? Color.black.opacity(0.09) : accent.opacity(0.12), in: Circle())
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(style.title).font(.system(size: 12, weight: .bold)).lineLimit(1)
+                                    Text(style.description).font(.system(size: 9)).foregroundStyle(appliedStyle == style ? .black.opacity(0.65) : .white.opacity(0.52)).lineLimit(2)
+                                }
+                                Spacer(minLength: 0)
+                                if appliedStyle == style { Image(systemName: "checkmark.circle.fill").font(.system(size: 13)) }
+                            }
+                            .foregroundStyle(appliedStyle == style ? .black : .white)
+                            .padding(.horizontal, 9).padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                            .background(appliedStyle == style ? accent : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
+                            .overlay(RoundedRectangle(cornerRadius: 13).stroke(appliedStyle == style ? accent : Color.white.opacity(0.08), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(sourceImage == nil)
+                    }
+                }
+                if let message {
+                    Text(message).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.65))
+                } else {
+                    Text(isVideo ? "Video boyunca tek ve tutarlı renk ayarı kullanılır." : "Orijinal fotoğraf korunur; değişiklikleri geri alabilirsin.")
+                        .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
+                }
+            }
+            .padding(.vertical, 3)
+        }
+    }
+
+    private func apply(_ style: AutoLookStyle) {
+        guard let sourceImage else {
+            message = "Önizleme hazırlanıyor. Birazdan tekrar dene."
+            return
+        }
+        var recipe = ImageRenderer.automaticLook(source: sourceImage, lut: lut, lutIntensity: settings.intensity, sourceLUT: sourceLUT, style: style)
+        recipe.autoEnhance = style == .automatic && !isVideo
+        recipe.source = settings.source
+        recipe.lutName = settings.lutName
+        recipe.customLUTFileName = settings.customLUTFileName
+        recipe.intensity = settings.intensity
+        recipe.cropAspect = settings.cropAspect
+        recipe.maskEnabled = settings.maskEnabled
+        recipe.maskExposure = settings.maskExposure
+        recipe.maskRadius = settings.maskRadius
+        recipe.maskFeather = settings.maskFeather
+        recipe.trimStart = settings.trimStart
+        recipe.trimEnd = settings.trimEnd
+        recipe.exportCodec = settings.exportCodec
+        recipe.exportResolution = settings.exportResolution
+        recipe.exportBitrateMode = settings.exportBitrateMode
+        recipe.exportBitrateMbps = settings.exportBitrateMbps
+        settings = recipe
+        appliedStyle = style
+        message = "\(style.title) görünümü uygulandı. Önceki renk ayarlarına geri al ile dönebilirsin."
     }
 }
 
@@ -1747,6 +1870,130 @@ enum ImageRenderer { static let context = CIContext()
             image.draw(in: CGRect(origin: .zero, size: target))
         }
     }
+    private struct AutoLookStats {
+        var meanLuma = 0.45
+        var lowPercentile = 0.1
+        var highPercentile = 0.9
+        var darkFraction = 0.2
+        var highlightFraction = 0.05
+        var meanSaturation = 0.25
+    }
+
+    fileprivate static func automaticLook(source: UIImage, lut: CubeLUT?, lutIntensity: Double, sourceLUT: CubeLUT?, style: AutoLookStyle) -> GradeSettings {
+        let stats = autoLookStats(source: source, lut: lut, lutIntensity: lutIntensity, sourceLUT: sourceLUT)
+        let targetLuma = 0.46
+        var exposure = log2(targetLuma / max(0.035, stats.meanLuma)) * 0.48
+        if stats.highPercentile > 0.95 { exposure -= min(0.35, (stats.highPercentile - 0.95) * 3) }
+        exposure = min(0.65, max(-0.65, exposure))
+
+        let range = max(0.08, stats.highPercentile - stats.lowPercentile)
+        let flatImageBoost = min(0.11, max(0, 0.48 - range) * 0.23)
+        let shadowLift = min(0.28, max(0.035, stats.darkFraction * 0.5))
+        let highlightRecovery = min(0.2, max(0, (stats.highlightFraction - 0.04) * 0.8))
+        let saturationHeadroom = min(1, max(0.15, 1.0 - stats.meanSaturation * 0.7))
+
+        let contrastBase: Double
+        let saturationBase: Double
+        let vibranceBase: Double
+        let temperatureOffset: Double
+        let shadowTone: Double
+        let highlightTone: Double
+        let vignette: Double
+        let bloom: Double
+        switch style {
+        case .automatic:
+            contrastBase = 1.07; saturationBase = 0.10; vibranceBase = 0.10
+            temperatureOffset = 100; shadowTone = -0.08; highlightTone = 0.06
+            vignette = 0.08; bloom = 0
+        case .cinematic:
+            contrastBase = 1.15; saturationBase = 0.10; vibranceBase = 0.08
+            temperatureOffset = 170; shadowTone = -0.2; highlightTone = 0.13
+            vignette = 0.16; bloom = 0.04
+        case .warm:
+            contrastBase = 1.08; saturationBase = 0.11; vibranceBase = 0.10
+            temperatureOffset = 430; shadowTone = -0.04; highlightTone = 0.15
+            vignette = 0.1; bloom = 0.02
+        case .vivid:
+            contrastBase = 1.11; saturationBase = 0.13; vibranceBase = 0.2
+            temperatureOffset = 60; shadowTone = -0.06; highlightTone = 0.04
+            vignette = 0.04; bloom = 0
+        }
+
+        var result = GradeSettings()
+        result.autoEnhance = false
+        result.exposure = exposure
+        result.contrast = contrastBase + flatImageBoost
+        result.saturation = 1 + saturationBase * saturationHeadroom
+        result.vibrance = vibranceBase * saturationHeadroom
+        result.temperature = 6500 + temperatureOffset
+        result.shadows = shadowLift
+        result.highlights = 1 - highlightRecovery
+        result.brilliance = 0.12 + min(0.08, stats.darkFraction * 0.1)
+        result.wheelShadows = shadowTone
+        result.wheelHighlights = highlightTone
+        result.vignette = vignette
+        result.bloom = bloom
+        result.sharpness = 0.08
+        result.definition = 0.06
+        return result
+    }
+
+    private static func autoLookStats(source: UIImage, lut: CubeLUT?, lutIntensity: Double, sourceLUT: CubeLUT?) -> AutoLookStats {
+        guard var image = CIImage(image: source) else { return AutoLookStats() }
+        if let sourceLUT { image = apply(sourceLUT, to: image, intensity: 1) }
+        if let lut { image = apply(lut, to: image, intensity: min(1, max(0, lutIntensity / 100))) }
+        let longest = max(image.extent.width, image.extent.height)
+        let scale = min(1, 72 / max(1, longest))
+        image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let rendered = context.createCGImage(image, from: image.extent, format: .RGBA8, colorSpace: colorSpace),
+              let data = rendered.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return AutoLookStats() }
+
+        var result = AutoLookStats()
+        var histogram = [Int](repeating: 0, count: 256)
+        var sumLuma = 0.0
+        var sumSaturation = 0.0
+        var shadows = 0
+        var highlights = 0
+        var samples = 0
+        for y in 0..<rendered.height {
+            for x in 0..<rendered.width {
+                let offset = y * rendered.bytesPerRow + x * 4
+                let red = Double(bytes[offset]) / 255
+                let green = Double(bytes[offset + 1]) / 255
+                let blue = Double(bytes[offset + 2]) / 255
+                let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+                let maximum = max(red, green, blue)
+                let minimum = min(red, green, blue)
+                let saturation = maximum > 0.001 ? (maximum - minimum) / maximum : 0
+                histogram[min(255, max(0, Int(luma * 255)))] += 1
+                sumLuma += luma
+                sumSaturation += saturation
+                if luma < 0.12 { shadows += 1 }
+                if luma > 0.9 { highlights += 1 }
+                samples += 1
+            }
+        }
+        guard samples > 0 else { return result }
+        func percentile(_ fraction: Double) -> Double {
+            let target = Int(Double(samples) * fraction)
+            var accumulated = 0
+            for (index, count) in histogram.enumerated() {
+                accumulated += count
+                if accumulated >= target { return Double(index) / 255 }
+            }
+            return 1
+        }
+        result.meanLuma = sumLuma / Double(samples)
+        result.lowPercentile = percentile(0.1)
+        result.highPercentile = percentile(0.9)
+        result.darkFraction = Double(shadows) / Double(samples)
+        result.highlightFraction = Double(highlights) / Double(samples)
+        result.meanSaturation = sumSaturation / Double(samples)
+        return result
+    }
+
     static func thumbnail(_ source: UIImage, settings: GradeSettings, lut: CubeLUT?, sourceLUT: CubeLUT? = nil) -> UIImage {
         let target = CGSize(width: 180, height: 112)
         let renderer = UIGraphicsImageRenderer(size: target)
