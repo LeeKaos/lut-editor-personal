@@ -18,7 +18,6 @@ final class EngineViewModel: ObservableObject {
         }
 
         let request = VNClassifyImageRequest()
-        request.imageCropAndScaleOption = .scaleFit
         do {
             try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
         } catch {
