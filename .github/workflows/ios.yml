@@ -17,7 +17,7 @@ jobs:
         run: |
           set -euxo pipefail
           python -m pip install --upgrade pip
-          python -m pip install numpy==1.26.4 Pillow==11.1.0 coremltools==9.0 torch==2.7.1
+          python -m pip install numpy==1.26.4 Pillow==11.1.0 matplotlib==3.10.0 scikit-image==0.25.2 coremltools==9.0 torch==2.7.0
           git clone --filter=blob:none https://github.com/sjmoran/deeplpf-image-enhancement.git "$RUNNER_TEMP/deeplpf-source"
           git -C "$RUNNER_TEMP/deeplpf-source" checkout 4faeef6597f299d38acc597df9cfe970f8d90ca2
           python Scripts/convert_deeplpf_coreml.py \
