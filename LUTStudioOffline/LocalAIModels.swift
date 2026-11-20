@@ -264,10 +264,9 @@ final class LocalAIModelStore: ObservableObject {
     private nonisolated static func predictSingle(model: MLModel, image: CGImage, kind: LocalAIModelKind) throws -> CGImage {
         let source = CIImage(cgImage: image)
         let inputDescriptions = model.modelDescription.inputDescriptionsByName
-        guard let inputName = inputDescriptions.keys.sorted().first(where: {
-            let type = inputDescriptions[$0]?.type
-            return type == .image || type == .multiArray
-        }), let inputDescription = inputDescriptions[inputName] else {
+        guard inputDescriptions.values.contains(where: {
+            $0.type == .image || $0.type == .multiArray
+        }) else {
             throw LocalAIError.incompatibleModel("Modelin girişinde image veya multiArray bulunamadı.")
         }
 
