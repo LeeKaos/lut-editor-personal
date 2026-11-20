@@ -406,7 +406,7 @@ final class LocalAIModelStore: ObservableObject {
                             : [y as NSNumber, x as NSNumber, channel as NSNumber]
                     }
                     let raw = array[indices].floatValue
-                    let value: Float = kind == .codeFormer && raw < 0 ? (raw + 1) / 2 : (raw > 1.5 ? raw / 255 : raw)
+                    let value: Float = kind == .codeFormer ? (raw + 1) / 2 : (raw > 1.5 ? raw / 255 : raw)
                     bytes[offset + channel] = UInt8(min(255, max(0, value * 255)))
                 }
             }
