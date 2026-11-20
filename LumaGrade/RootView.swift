@@ -964,7 +964,17 @@ struct EditorView: View {
         case 2:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
         case 3:
-            AutoLookPanel(settings: $project.settings, sourceImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT, isVideo: isVideo)
+            AutoLookPanel(
+                settings: $project.settings,
+                sourceImage: sourcePreviewImage ?? library.image(for: project),
+                lut: importedLUT,
+                sourceLUT: sourceLUT,
+                isVideo: isVideo,
+                canUndo: !undoStack.isEmpty,
+                canRedo: !redoStack.isEmpty,
+                onUndo: undo,
+                onRedo: redo
+            )
         default:
             EngineView(viewModel: engineViewModel, inputImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT, isVideo: isVideo, onApplySettings: { project.settings = $0 })
         }
@@ -1128,8 +1138,14 @@ private struct AutoLookPanel: View {
     let lut: CubeLUT?
     let sourceLUT: CubeLUT?
     let isVideo: Bool
+    let canUndo: Bool
+    let canRedo: Bool
+    let onUndo: () -> Void
+    let onRedo: () -> Void
     @State private var appliedStyle: AutoLookStyle?
     @State private var message: String?
+    @State private var settingsBeforeLook: GradeSettings?
+    @State private var lastPanelSettings: GradeSettings?
 
     private let columns = [GridItem(.flexible(), spacing: 9), GridItem(.flexible(), spacing: 9)]
 
@@ -1147,6 +1163,27 @@ private struct AutoLookPanel: View {
                     }
                     Spacer(minLength: 0)
                 }
+                HStack(spacing: 8) {
+                    Button(action: onUndo) {
+                        Label("Geri al", systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canUndo)
+                    Button(action: onRedo) {
+                        Label("İleri al", systemImage: "arrow.uturn.forward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canRedo)
+                    if settingsBeforeLook != nil {
+                        Button(action: restoreBeforeLook) {
+                            Label("Görünümü kaldır", systemImage: "arrow.counterclockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .buttonStyle(.bordered)
+                .tint(.white.opacity(0.85))
                 LazyVGrid(columns: columns, spacing: 9) {
                     ForEach(AutoLookStyle.allCases) { style in
                         Button { apply(style) } label: {
@@ -1158,14 +1195,14 @@ private struct AutoLookPanel: View {
                                     .background(appliedStyle == style ? Color.black.opacity(0.09) : accent.opacity(0.12), in: Circle())
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(style.title).font(.system(size: 12, weight: .bold)).lineLimit(1)
-                                    Text(style.description).font(.system(size: 9)).foregroundStyle(appliedStyle == style ? .black.opacity(0.65) : .white.opacity(0.52)).lineLimit(2)
+                                    Text(style.description).font(.system(size: 9)).foregroundStyle(appliedStyle == style ? .black.opacity(0.65) : .white.opacity(0.52)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer(minLength: 0)
                                 if appliedStyle == style { Image(systemName: "checkmark.circle.fill").font(.system(size: 13)) }
                             }
                             .foregroundStyle(appliedStyle == style ? .black : .white)
                             .padding(.horizontal, 9).padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
                             .background(appliedStyle == style ? accent : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
                             .overlay(RoundedRectangle(cornerRadius: 13).stroke(appliedStyle == style ? accent : Color.white.opacity(0.08), lineWidth: 1))
                         }
@@ -1176,11 +1213,22 @@ private struct AutoLookPanel: View {
                 if let message {
                     Text(message).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.65))
                 } else {
-                    Text(isVideo ? "Video boyunca tek ve tutarlı renk ayarı kullanılır." : "Orijinal fotoğraf korunur; değişiklikleri geri alabilirsin.")
+                    Text(isVideo ? "Önizleme karesine göre tek bir renk görünümü hazırlanır ve video boyunca tutarlı uygulanır." : "Görünümü uyguladıktan sonra Geri al ile adım adım dönebilir, Görünümü kaldır ile önceki ayarlarına geçebilirsin.")
                         .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
                 }
             }
             .padding(.vertical, 3)
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+        }
+        .onChange(of: settings) { _, newValue in
+            if newValue == lastPanelSettings {
+                lastPanelSettings = nil
+            } else {
+                appliedStyle = nil
+                settingsBeforeLook = nil
+                message = "Düzenleme geçmişindeki değişiklik uygulandı."
+            }
         }
     }
 
@@ -1189,26 +1237,44 @@ private struct AutoLookPanel: View {
             message = "Önizleme hazırlanıyor. Birazdan tekrar dene."
             return
         }
-        var recipe = ImageRenderer.automaticLook(source: sourceImage, lut: lut, lutIntensity: settings.intensity, sourceLUT: sourceLUT, style: style)
-        recipe.autoEnhance = style == .automatic && !isVideo
-        recipe.source = settings.source
-        recipe.lutName = settings.lutName
-        recipe.customLUTFileName = settings.customLUTFileName
-        recipe.intensity = settings.intensity
-        recipe.cropAspect = settings.cropAspect
-        recipe.maskEnabled = settings.maskEnabled
-        recipe.maskExposure = settings.maskExposure
-        recipe.maskRadius = settings.maskRadius
-        recipe.maskFeather = settings.maskFeather
-        recipe.trimStart = settings.trimStart
-        recipe.trimEnd = settings.trimEnd
-        recipe.exportCodec = settings.exportCodec
-        recipe.exportResolution = settings.exportResolution
-        recipe.exportBitrateMode = settings.exportBitrateMode
-        recipe.exportBitrateMbps = settings.exportBitrateMbps
-        settings = recipe
+        let baseline = settingsBeforeLook ?? settings
+        if settingsBeforeLook == nil { settingsBeforeLook = baseline }
+        let look = ImageRenderer.automaticLook(source: sourceImage, lut: lut, lutIntensity: baseline.intensity, sourceLUT: sourceLUT, style: style)
+        let updatedSettings = mergedLook(look, into: baseline, style: style)
+        lastPanelSettings = updatedSettings
+        settings = updatedSettings
         appliedStyle = style
-        message = "\(style.title) görünümü uygulandı. Önceki renk ayarlarına geri al ile dönebilirsin."
+        message = "\(style.title) görünümü uygulandı. Mevcut LUT’un ve elle yaptığın diğer düzenlemeler korundu."
+    }
+
+    private func mergedLook(_ look: GradeSettings, into base: GradeSettings, style: AutoLookStyle) -> GradeSettings {
+        var result = base
+        result.exposure = min(3, max(-3, base.exposure + look.exposure))
+        result.contrast = min(2, max(0.5, base.contrast * look.contrast))
+        result.saturation = min(2, max(0, base.saturation * look.saturation))
+        result.temperature = min(12000, max(2000, base.temperature + look.temperature - 6500))
+        result.tint = min(150, max(-150, base.tint + look.tint))
+        result.highlights = min(2, max(0, base.highlights - (1 - look.highlights)))
+        result.shadows = min(2, max(0, base.shadows + look.shadows))
+        result.vibrance = min(1, max(-1, base.vibrance + look.vibrance))
+        result.brilliance = min(1, max(-1, base.brilliance + look.brilliance))
+        result.wheelShadows = min(1, max(-1, base.wheelShadows + look.wheelShadows))
+        result.wheelHighlights = min(1, max(-1, base.wheelHighlights + look.wheelHighlights))
+        result.vignette = min(2, max(0, base.vignette + look.vignette))
+        result.bloom = min(1, max(0, base.bloom + look.bloom))
+        result.sharpness = min(1, max(0, base.sharpness + look.sharpness))
+        result.definition = min(1, max(0, base.definition + look.definition))
+        result.autoEnhance = base.autoEnhance || (style == .automatic && !isVideo)
+        return result
+    }
+
+    private func restoreBeforeLook() {
+        guard let settingsBeforeLook else { return }
+        lastPanelSettings = settingsBeforeLook
+        settings = settingsBeforeLook
+        self.settingsBeforeLook = nil
+        appliedStyle = nil
+        message = "Özel görünüm kaldırıldı. Önceki ayarların geri yüklendi."
     }
 }
 
