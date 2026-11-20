@@ -722,6 +722,7 @@ struct EditorView: View {
     @State private var favoriteLUTNames = Set(UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteLUTs") ?? [])
     @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
     @State private var isExporting = false; @State private var exportProgress = 0.0
+    @State private var engineResultImage: UIImage?
     @State private var showingFileExportPicker = false; @State private var fileExportURLs: [URL] = []
     private var isVideo: Bool { ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased()) }
     private var lutCategories: [String] {
@@ -885,7 +886,7 @@ struct EditorView: View {
                     }
             }
             else if isVideo { ProgressView("Video yükleniyor") }
-            else if let source = library.image(for: project) {
+            else if let source = engineResultImage ?? library.image(for: project) {
                 let rendered = showingOriginal ? source : ImageRenderer.grade(source, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
                 Image(uiImage: rendered).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18))
                     .onLongPressGesture(minimumDuration: 0.12, pressing: { pressing in showingOriginal = pressing }, perform: {})
@@ -976,7 +977,16 @@ struct EditorView: View {
                 onRedo: redo
             )
         case 4:
-            EmptyView()
+            EnginePanel(
+                sourceImage: sourcePreviewImage ?? library.image(for: project),
+                isVideo: isVideo,
+                onApply: { image in
+                    guard !isVideo, let data = image.pngData(),
+                          let updated = try? library.add(imageData: data, fileExtension: "png", source: project.settings.source) else { return }
+                    project = updated
+                    engineResultImage = image
+                }
+            )
         default:
             EmptyView()
         }
