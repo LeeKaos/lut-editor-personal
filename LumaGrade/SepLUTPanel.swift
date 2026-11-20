@@ -312,8 +312,8 @@ struct SepLUTPanel: View {
         var previewSettings = settings
         previewSettings.intensity = currentIntensity
         Task {
-            outputPreview = await Task.detached(priority: .userInitiated) {
-                try autoreleasepool {
+            outputPreview = try await Task.detached(priority: .userInitiated) {
+                autoreleasepool {
                     let reduced = Self.previewImage(sourceImage, maxDimension: 960)
                     return ImageRenderer.grade(reduced, settings: previewSettings, lut: prediction.cube(), sourceLUT: sourceLUT)
                 }
@@ -321,7 +321,7 @@ struct SepLUTPanel: View {
         }
     }
 
-    private static func previewImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+    nonisolated private static func previewImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
         let pixelWidth = CGFloat(image.cgImage?.width ?? Int(image.size.width * image.scale))
         let pixelHeight = CGFloat(image.cgImage?.height ?? Int(image.size.height * image.scale))
         let scale = min(1, maxDimension / max(1, max(pixelWidth, pixelHeight)))
