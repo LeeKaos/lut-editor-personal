@@ -137,7 +137,7 @@ final class LocalAIModelStore: ObservableObject {
                 guard let tileCG = context.createCGImage(tile, from: tileRect) else {
                     throw LocalAIError.invalidImage
                 }
-                let outputCG = try predictSingle(model: model, image: tileCG)
+                let outputCG = try predictSingle(model: model, image: tileCG, kind: .realESRGAN)
                 scaleX = CGFloat(outputCG.width) / CGFloat(tileWidth)
                 scaleY = CGFloat(outputCG.height) / CGFloat(tileHeight)
 
@@ -203,7 +203,7 @@ final class LocalAIModelStore: ObservableObject {
                 continue
             }
 
-            let restoredCG = try predictSingle(model: model, image: cropCG)
+            let restoredCG = try predictSingle(model: model, image: cropCG, kind: .codeFormer)
             let restored = CIImage(cgImage: restoredCG)
                 .transformed(by: CGAffineTransform(scaleX: cropRect.width / CGFloat(restoredCG.width),
                                                    y: cropRect.height / CGFloat(restoredCG.height)))
@@ -233,7 +233,7 @@ final class LocalAIModelStore: ObservableObject {
         return result
     }
 
-    private nonisolated static func predictSingle(model: MLModel, image: CGImage) throws -> CGImage {
+    private nonisolated static func predictSingle(model: MLModel, image: CGImage, kind: LocalAIModelKind) throws -> CGImage {
         let source = CIImage(cgImage: image)
         let inputDescriptions = model.modelDescription.inputDescriptionsByName
         guard let inputName = inputDescriptions.keys.sorted().first(where: {
@@ -255,7 +255,7 @@ final class LocalAIModelStore: ObservableObject {
             case .multiArray:
                 guard let constraint = description.multiArrayConstraint else { continue }
                 features[name] = MLFeatureValue(multiArray: try makeTensor(from: source, shape: constraint.shape.map(\.intValue),
-                                                                            dataType: constraint.dataType))
+                                                                            dataType: constraint.dataType, kind: kind))
             case .double:
                 let value = name.lowercased().contains("fidelity") || name.lowercased() == "w" ? 0.7 : 0.0
                 features[name] = MLFeatureValue(double: value)
@@ -279,7 +279,7 @@ final class LocalAIModelStore: ObservableObject {
                 return result
             }
             if let array = output.multiArrayValue {
-                let outputImage = try ciImage(from: array)
+                let outputImage = try ciImage(from: array, kind: kind)
                 let context = CIContext(options: [.cacheIntermediates: false])
                 guard let result = context.createCGImage(outputImage, from: outputImage.extent) else {
                     throw LocalAIError.invalidModelOutput
@@ -314,7 +314,7 @@ final class LocalAIModelStore: ObservableObject {
     }
 
     private nonisolated static func makeTensor(from image: CIImage, shape: [Int],
-                                               dataType: MLMultiArrayDataType) throws -> MLMultiArray {
+                                               dataType: MLMultiArrayDataType, kind: LocalAIModelKind) throws -> MLMultiArray {
         guard shape.count >= 3 else { throw LocalAIError.incompatibleModel("Tensor boyutu desteklenmiyor.") }
         let channelFirst = shape.count == 4 ? shape[1] == 3 : shape[0] == 3
         let height = shape.count == 4 ? (channelFirst ? shape[2] : shape[1]) : (channelFirst ? shape[1] : shape[0])
@@ -347,14 +347,15 @@ final class LocalAIModelStore: ObservableObject {
                             ? [channel as NSNumber, y as NSNumber, x as NSNumber]
                             : [y as NSNumber, x as NSNumber, channel as NSNumber]
                     }
-                    array[indices] = NSNumber(value: rgb[channel])
+                    let normalized = kind == .codeFormer ? rgb[channel] * 2 - 1 : rgb[channel]
+                    array[indices] = NSNumber(value: normalized)
                 }
             }
         }
         return array
     }
 
-    private nonisolated static func ciImage(from array: MLMultiArray) throws -> CIImage {
+    private nonisolated static func ciImage(from array: MLMultiArray, kind: LocalAIModelKind) throws -> CIImage {
         let shape = array.shape.map(\.intValue)
         guard shape.count >= 3 else { throw LocalAIError.invalidModelOutput }
         let channelFirst = shape.count == 4 ? shape[1] == 3 : shape[0] == 3
@@ -378,7 +379,7 @@ final class LocalAIModelStore: ObservableObject {
                             : [y as NSNumber, x as NSNumber, channel as NSNumber]
                     }
                     let raw = array[indices].floatValue
-                    let value = raw > 1.5 ? raw / 255 : raw
+                    let value: Float = kind == .codeFormer && raw < 0 ? (raw + 1) / 2 : (raw > 1.5 ? raw / 255 : raw)
                     bytes[offset + channel] = UInt8(min(255, max(0, value * 255)))
                 }
             }
