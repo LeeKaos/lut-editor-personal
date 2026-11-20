@@ -52,7 +52,7 @@ private enum DeepLPFModel {
                 let configuration = MLModelConfiguration()
                 configuration.computeUnits = .all
                 let model = try MLModel(contentsOf: modelURL, configuration: configuration)
-                let inputBuffer = try Self.pixelBuffer(from: cgImage)
+                let inputBuffer = try Self.pixelBuffer(from: cgImage, width: 512, height: 512)
                 let input = MLFeatureValue(pixelBuffer: inputBuffer)
                 let provider = try MLDictionaryFeatureProvider(dictionary: ["image": input])
                 let result = try model.prediction(from: provider)
@@ -64,7 +64,13 @@ private enum DeepLPFModel {
                 guard let outputCG = context.createCGImage(ciImage, from: ciImage.extent) else {
                     throw DeepLPFError.noImageOutput
                 }
-                return UIImage(cgImage: outputCG, scale: image.scale, orientation: .up)
+                let finalSize = CGSize(width: cgImage.width, height: cgImage.height)
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                format.opaque = true
+                return UIGraphicsImageRenderer(size: finalSize, format: format).image { _ in
+                    UIImage(cgImage: outputCG).draw(in: CGRect(origin: .zero, size: finalSize))
+                }
             }
         }.value
     }
@@ -83,7 +89,7 @@ private enum DeepLPFModel {
         }
     }
 
-    private static func pixelBuffer(from image: CGImage) throws -> CVPixelBuffer {
+    private static func pixelBuffer(from image: CGImage, width: Int, height: Int) throws -> CVPixelBuffer {
         var pixelBuffer: CVPixelBuffer?
         let attributes: [String: Any] = [
             kCVPixelBufferCGImageCompatibilityKey as String: true,
@@ -92,8 +98,8 @@ private enum DeepLPFModel {
         ]
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
-            image.width,
-            image.height,
+            width,
+            height,
             kCVPixelFormatType_32BGRA,
             attributes as CFDictionary,
             &pixelBuffer
@@ -104,14 +110,15 @@ private enum DeepLPFModel {
         guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer),
               let context = CGContext(
                 data: baseAddress,
-                width: image.width,
-                height: image.height,
+                width: width,
+                height: height,
                 bitsPerComponent: 8,
                 bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
                 space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
               ) else { throw DeepLPFError.noImageOutput }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return pixelBuffer
     }
 }
