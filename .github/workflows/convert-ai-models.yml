@@ -80,6 +80,27 @@ jobs:
           print("Patched encoder feature storage and generator fusion keys.")
           PY
 
+      - name: Replace unsupported variance operation for Core ML
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
+          source = path.read_text(encoding="utf-8")
+          old = "    feat_var = feat.view(b, c, -1).var(dim=2) + eps"
+          new = """    flat = feat.view(b, c, -1)
+              feat_mean = flat.mean(dim=2)
+              centered = flat - feat_mean.unsqueeze(-1)
+              # Match torch.var's default unbiased (N-1) estimator without aten::var.
+              feat_var = (centered * centered).sum(dim=2) / (flat.shape[2] - 1) + eps"""
+          if source.count(old) != 1:
+              raise SystemExit(
+                  f"Expected one CodeFormer AdaIN variance expression, found {source.count(old)}"
+              )
+          source = source.replace(old, new, 1)
+          path.write_text(source, encoding="utf-8")
+          print("Replaced aten::var with mean/center/square/sum operations.")
+          PY
+
       - name: Download official model checkpoints
         run: |
           mkdir -p CodeFormer/weights/CodeFormer weights
