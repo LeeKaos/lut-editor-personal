@@ -483,6 +483,40 @@ struct EditorView: View {
         }
     }
 
+    private var customPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles").font(.system(size: 22, weight: .semibold)).foregroundStyle(accent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Güzelleştir").font(.system(size: 16, weight: .semibold))
+                    Text("Doğal renk ve detay iyileştirmesi").font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+                }
+                Spacer()
+                Text(settings.beautifyEnabled == true ? "AÇIK" : "HAZIR")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(settings.beautifyEnabled == true ? .black : .white.opacity(0.7))
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(settings.beautifyEnabled == true ? accent : .white.opacity(0.1), in: Capsule())
+            }
+            Text("Tek dokunuşla hafif renk dengesi, kontrollü kontrast ve doğal netlik uygular. Yüzü yeniden oluşturmaz veya cilt dokusunu yapay biçimde yumuşatmaz.")
+                .font(.system(size: 11)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
+            Button {
+                settings.beautifyEnabled = settings.beautifyEnabled != true
+                settings.smartEnhance = nil
+            } label: {
+                Label(settings.beautifyEnabled == true ? "Güzelleştirmeyi Kapat" : "Tek Dokunuşla Güzelleştir",
+                      systemImage: settings.beautifyEnabled == true ? "checkmark.circle.fill" : "wand.and.stars")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(.black)
+                    .frame(maxWidth: .infinity).padding(.vertical, 13).background(accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            Text("İşlem cihaz üzerinde yapılır. Fotoğraf ve videolar buluta gönderilmez.")
+                .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20).padding(.top, 8).foregroundStyle(.white)
+    }
+
     private var filtersPanel: some View {
         VStack(spacing: 12) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -548,19 +582,20 @@ struct EditorView: View {
         VStack(spacing: 16) {
             HStack(spacing: 8) {
                 Button {
-                    settings.smartEnhance = settings.smartEnhance != true
+                    settings.beautifyEnabled = settings.beautifyEnabled != true
+                    settings.smartEnhance = nil
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: "sparkles")
-                        Text("Smart Enhance · On device")
+                        Text("Natural Enhance")
                         Spacer()
-                        Text(settings.smartEnhance == true ? "ON" : "AUTO")
+                        Text(settings.beautifyEnabled == true ? "ON" : "OFF")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                     }
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(settings.smartEnhance == true ? .black : .white)
+                    .foregroundStyle(settings.beautifyEnabled == true ? .black : .white)
                     .padding(.horizontal, 14).frame(height: 38)
-                    .background(settings.smartEnhance == true ? accent : .white.opacity(0.08), in: Capsule())
+                    .background(settings.beautifyEnabled == true ? accent : .white.opacity(0.08), in: Capsule())
                 }
                 .buttonStyle(.plain)
 
@@ -759,6 +794,7 @@ struct EditorView: View {
         settings.curves = 0
         settings.curvePoints = [0, 0.25, 0.5, 0.75, 1]
         settings.smartEnhance = nil
+        settings.beautifyEnabled = nil
     }
 
     private func deletePreset(_ preset: UserPreset) {
@@ -1019,19 +1055,7 @@ struct EditorView: View {
 
     private static func grade(_ source: CIImage, settings: GradeSettings, cube: CubeLUT?) -> CIImage {
         var image = source
-        if settings.smartEnhance == true {
-            let options: [CIImageAutoAdjustmentOption: Any] = [
-                .enhance: true,
-                .redEye: false,
-                .crop: false,
-                .level: false
-            ]
-            for filter in image.autoAdjustmentFilters(options: options) {
-                filter.setValue(image, forKey: kCIInputImageKey)
-                if let adjusted = filter.outputImage { image = adjusted }
-            }
-        }
-        if let cube, settings.lutIntensity > 0,
+         if let cube, settings.lutIntensity > 0,
            let lutFilter = CIFilter(name: "CIColorCubeWithColorSpace") {
             lutFilter.setValue(image, forKey: kCIInputImageKey)
             lutFilter.setValue(cube.dimension, forKey: "inputCubeDimension")
@@ -1079,15 +1103,15 @@ struct EditorView: View {
             filter.setValue(CIVector(x: CGFloat(6500 + settings.temperature * 2800), y: CGFloat(settings.temperature * 20)), forKey: "inputTargetNeutral")
             image = filter.outputImage ?? image
         }
-        if settings.sharpness != 0, let filter = CIFilter(name: "CISharpenLuminance") {
+        if settings.sharpness > 0, let filter = CIFilter(name: "CISharpenLuminance") {
             filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(settings.sharpness * 1.5, forKey: kCIInputSharpnessKey)
+            filter.setValue(min(0.8, settings.sharpness * 0.8), forKey: kCIInputSharpnessKey)
             image = filter.outputImage ?? image
         }
-        if settings.vignette != 0, let filter = CIFilter(name: "CIVignette") {
+        if settings.vignette > 0, let filter = CIFilter(name: "CIVignette") {
             filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(settings.vignette * 2, forKey: kCIInputIntensityKey)
-            filter.setValue(max(source.extent.width, source.extent.height) * 0.7, forKey: kCIInputRadiusKey)
+            filter.setValue(min(1, settings.vignette * 0.8), forKey: kCIInputIntensityKey)
+            filter.setValue(max(source.extent.width, source.extent.height) * 0.72, forKey: kCIInputRadiusKey)
             image = filter.outputImage ?? image
         }
         if let filter = CIFilter(name: "CIToneCurve") {
@@ -1098,14 +1122,35 @@ struct EditorView: View {
             }
             image = filter.outputImage ?? image
         }
-        let amount = settings.effectIntensity
+        if settings.beautifyEnabled == true {
+            // Conservative Core Image adjustments; no face synthesis or automatic contrast stretching.
+            if let color = CIFilter(name: "CIColorControls") {
+                color.setValue(image, forKey: kCIInputImageKey)
+                color.setValue(1.025, forKey: kCIInputSaturationKey)
+                color.setValue(1.025, forKey: kCIInputContrastKey)
+                color.setValue(0.006, forKey: kCIInputBrightnessKey)
+                image = color.outputImage ?? image
+            }
+            if let tone = CIFilter(name: "CIHighlightShadowAdjust") {
+                tone.setValue(image, forKey: kCIInputImageKey)
+                tone.setValue(0.12, forKey: "inputShadowAmount")
+                tone.setValue(0.98, forKey: "inputHighlightAmount")
+                image = tone.outputImage ?? image
+            }
+            if let detail = CIFilter(name: "CISharpenLuminance") {
+                detail.setValue(image, forKey: kCIInputImageKey)
+                detail.setValue(0.18, forKey: kCIInputSharpnessKey)
+                image = detail.outputImage ?? image
+            }
+        }
+        let amount = min(1, max(0, settings.effectIntensity))
         switch settings.effect {
         case .none: break
         case .bloom:
             if let filter = CIFilter(name: "CIBloom") {
                 filter.setValue(image, forKey: kCIInputImageKey)
-                filter.setValue(amount * 2, forKey: kCIInputIntensityKey)
-                filter.setValue(settings.size * 40 + 4, forKey: kCIInputRadiusKey)
+                filter.setValue(amount * 0.55, forKey: kCIInputIntensityKey)
+                filter.setValue(settings.size * 28 + 4, forKey: kCIInputRadiusKey)
                 image = filter.outputImage ?? image
             }
         case .grain:
@@ -1114,31 +1159,31 @@ struct EditorView: View {
                let mix = CIFilter(name: "CIDissolveTransition") {
                 controls.setValue(noise, forKey: kCIInputImageKey)
                 controls.setValue(0, forKey: kCIInputSaturationKey)
-                controls.setValue(settings.roughness * 2 + 0.1, forKey: kCIInputContrastKey)
+                controls.setValue(0.55 + settings.roughness * 0.8, forKey: kCIInputContrastKey)
                 blend.setValue(controls.outputImage, forKey: kCIInputImageKey)
                 blend.setValue(image, forKey: kCIInputBackgroundImageKey)
                 mix.setValue(image, forKey: "inputImage")
                 mix.setValue(blend.outputImage, forKey: "inputTargetImage")
-                mix.setValue(amount * 0.4, forKey: "inputTime")
+                mix.setValue(amount * 0.22, forKey: "inputTime")
                 image = mix.outputImage ?? image
             }
         case .halation:
             if let bloom = CIFilter(name: "CIBloom") {
                 bloom.setValue(image, forKey: kCIInputImageKey)
-                bloom.setValue(amount * 1.5, forKey: kCIInputIntensityKey)
-                bloom.setValue(settings.size * 30 + 3, forKey: kCIInputRadiusKey)
+                bloom.setValue(amount * 0.45, forKey: kCIInputIntensityKey)
+                bloom.setValue(settings.size * 20 + 3, forKey: kCIInputRadiusKey)
                 let glow = bloom.outputImage ?? image
                 image = glow.applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 1.2, y: 0, z: 0, w: 0),
-                    "inputGVector": CIVector(x: 0, y: 0.48, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 0.22, w: 0)
+                    "inputRVector": CIVector(x: 0.95, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: 0.28, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: 0.08, w: 0)
                 ])
             }
         case .softGlow:
             if let glow = CIFilter(name: "CIBloom"), let mix = CIFilter(name: "CIDissolveTransition") {
                 glow.setValue(image, forKey: kCIInputImageKey)
-                glow.setValue(amount * 1.2, forKey: kCIInputIntensityKey)
-                glow.setValue(settings.size * 50 + 8, forKey: kCIInputRadiusKey)
+                glow.setValue(amount * 0.45, forKey: kCIInputIntensityKey)
+                glow.setValue(settings.size * 30 + 4, forKey: kCIInputRadiusKey)
                 mix.setValue(image, forKey: "inputImage")
                 mix.setValue(glow.outputImage ?? image, forKey: "inputTargetImage")
                 mix.setValue(amount, forKey: "inputTime")
@@ -1369,7 +1414,8 @@ private struct CurveGraph: View {
                 .onChanged { value in
                     let index = Int((value.location.x / max(size.width, 1) * 4).rounded())
                     guard index > 0, index < 4 else { return }
-                    points[index] = min(1, max(0, 1 - Double(value.location.y / max(size.height, 1))))
+                    let proposed = min(1, max(0, 1 - Double(value.location.y / max(size.height, 1))))
+                    points[index] = min(points[index + 1], max(points[index - 1], proposed))
                 })
         }
         .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
