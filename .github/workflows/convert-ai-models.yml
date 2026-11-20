@@ -37,12 +37,8 @@ jobs:
       - name: Download official model checkpoints
         run: |
           mkdir -p CodeFormer/weights/CodeFormer weights
-          curl -fL --retry 5 --retry-delay 3 \\
-            https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth \\
-            -o CodeFormer/weights/CodeFormer/codeformer.pth
-          curl -fL --retry 5 --retry-delay 3 \\
-            https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/RealESRGAN_x4plus.pth \\
-            -o weights/RealESRGAN_x4plus.pth
+          curl -fL --retry 5 --retry-delay 3 https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth -o CodeFormer/weights/CodeFormer/codeformer.pth
+          curl -fL --retry 5 --retry-delay 3 https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/RealESRGAN_x4plus.pth -o weights/RealESRGAN_x4plus.pth
           ls -lh CodeFormer/weights/CodeFormer/codeformer.pth weights/RealESRGAN_x4plus.pth
 
       - name: Convert CodeFormer
