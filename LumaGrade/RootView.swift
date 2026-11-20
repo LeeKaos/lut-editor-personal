@@ -758,47 +758,53 @@ struct EditorView: View {
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
     init(project: GradeProject) { _project = State(initialValue: project) }
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }
-                    .frame(height: 330)
-                    .padding(.horizontal, 12)
-                previewActions
-                HStack(spacing: 0) {
-                    editorTab("Filtreler", symbol: "camera.filters", value: 0)
-                    editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
-                    editorTab("Efektler", symbol: "sparkles", value: 2)
-                    editorTab("Özel", symbol: "wand.and.stars", value: 3)
-                    editorTab("SepLUT", symbol: "cube.transparent", value: 4)
-                }
-                .padding(4)
-                .background(Color(red: 0.27, green: 0.27, blue: 0.29), in: Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1))
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                panel.padding(.horizontal).padding(.bottom, 8)
+        editorWithPresentations(editorWithEvents(NavigationStack { editorLayout }))
+    }
+    private var editorLayout: some View {
+        VStack(spacing: 0) {
+            GeometryReader { proxy in preview.frame(maxWidth: proxy.size.width, maxHeight: .infinity) }
+                .frame(height: 330)
+                .padding(.horizontal, 12)
+            previewActions
+            HStack(spacing: 0) {
+                editorTab("Filtreler", symbol: "camera.filters", value: 0)
+                editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
+                editorTab("Efektler", symbol: "sparkles", value: 2)
+                editorTab("Özel", symbol: "wand.and.stars", value: 3)
+                editorTab("SepLUT", symbol: "cube.transparent", value: 4)
             }
-            .background(Color.black)
-            .overlay { exportOverlay }
-            .navigationTitle(project.settings.lutName)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Kapat") { library.update(project); videoPlayer?.pause(); dismiss() }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button { showingExportSettings = true } label: { Image(systemName: "slider.horizontal.3") }
-                        .accessibilityLabel("Dışa aktarma ayarları")
-                    Button { showingPresets = true } label: { Image(systemName: "square.stack.3d.up") }
-                        .accessibilityLabel("Düzenleme presetleri")
-                    Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }
-                    Menu {
-                        Button { exportToPhotos() } label: { Label("Fotoğraflar’a kaydet", systemImage: "photo") }
-                        Button { exportToFiles() } label: { Label("Dosyalar’a aktar", systemImage: "folder") }
-                    } label: { exportButtonLabel }
-                    .accessibilityLabel("Dışa aktar")
-                    .disabled(isExporting)
-                }
-            }
+            .padding(4)
+            .background(Color(red: 0.27, green: 0.27, blue: 0.29), in: Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1))
+            .padding(.horizontal, 18).padding(.vertical, 10)
+            panel.padding(.horizontal).padding(.bottom, 8)
+        }
+        .background(Color.black)
+        .overlay { exportOverlay }
+        .navigationTitle(project.settings.lutName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { editorToolbar }
+    }
+    @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("Kapat") { library.update(project); videoPlayer?.pause(); dismiss() }
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { showingExportSettings = true } label: { Image(systemName: "slider.horizontal.3") }
+                .accessibilityLabel("Dışa aktarma ayarları")
+            Button { showingPresets = true } label: { Image(systemName: "square.stack.3d.up") }
+                .accessibilityLabel("Düzenleme presetleri")
+            Button { importing = true } label: { Image(systemName: "square.and.arrow.down") }
+            Menu {
+                Button { exportToPhotos() } label: { Label("Fotoğraflar’a kaydet", systemImage: "photo") }
+                Button { exportToFiles() } label: { Label("Dosyalar’a aktar", systemImage: "folder") }
+            } label: { exportButtonLabel }
+            .accessibilityLabel("Dışa aktar")
+            .disabled(isExporting)
+        }
+    }
+    private func editorWithEvents<V: View>(_ view: V) -> some View {
+        view
             .onAppear(perform: prepareEditor)
             .onDisappear { videoPlayer?.pause() }
             .onChange(of: project.settings) { oldValue, newValue in
@@ -835,10 +841,12 @@ struct EditorView: View {
                     } catch { lutLoadError = "LUT içe aktarılamadı: \(error.localizedDescription)" }
                 }
             }
+    }
+    private func editorWithPresentations<V: View>(_ view: V) -> some View {
+        view
             .sheet(isPresented: $showingPresets) { PresetManagerView(settings: $project.settings) }
             .sheet(isPresented: $showingFileExportPicker, onDismiss: cleanupFileExports) {
-                DocumentExportPicker(urls: fileExportURLs, isPresented: $showingFileExportPicker)
-                    .ignoresSafeArea()
+                DocumentExportPicker(urls: fileExportURLs, isPresented: $showingFileExportPicker).ignoresSafeArea()
             }
             .sheet(isPresented: $showingExportSettings) {
                 ExportSettingsView(settings: $project.settings, videoDuration: videoDuration)
@@ -865,7 +873,6 @@ struct EditorView: View {
             .alert("SepLUT", isPresented: Binding(get: { sepLUTError != nil }, set: { if !$0 { sepLUTError = nil } })) {
                 Button("Tamam", role: .cancel) { sepLUTError = nil }
             } message: { Text(sepLUTError ?? "") }
-        }
     }
     private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
         Button { tab = value } label: {
@@ -1073,7 +1080,7 @@ struct EditorView: View {
                         of: output,
                         to: destination,
                         colorSpace: colorSpace,
-                        options: [.lossyCompressionQuality: 0.98]
+                        options: [:]
                     )
                     return destination
                 }.value
