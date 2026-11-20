@@ -1822,10 +1822,20 @@ struct CubeLUT { let dimension: Int; let values: [Float]
         guard let text = try? String(contentsOf: url) else { return nil }
         var size: Int?; var values: [Float] = []
         for raw in text.components(separatedBy: .newlines) {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("LUT_3D_SIZE") { size = Int(line.split(separator: " ").last ?? "") }
-            let numbers = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).compactMap { Float($0) }
-            if numbers.count == 3 { values.append(contentsOf: numbers) }
+            let line = raw.components(separatedBy: "#").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !line.isEmpty else { continue }
+            let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            if fields.first == "LUT_3D_SIZE", fields.count >= 2 {
+                size = Int(fields[1])
+                continue
+            }
+            // Metadata such as DOMAIN_MIN/DOMAIN_MAX also contains three
+            // numeric values. Only accept bare RGB rows as cube samples.
+            guard fields.count == 3,
+                  let red = Float(fields[0]),
+                  let green = Float(fields[1]),
+                  let blue = Float(fields[2]) else { continue }
+            values.append(contentsOf: [red, green, blue])
         }
         guard let dimension = size, values.count == dimension * dimension * dimension * 3 else { return nil }
         return CubeLUT(dimension: dimension, values: values)
