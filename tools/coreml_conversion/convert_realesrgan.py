@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CODEFORMER = ROOT / "CodeFormer"
 WEIGHTS = ROOT / "weights" / "RealESRGAN_x4plus.pth"
 OUT = ROOT / "artifacts" / "RealESRGAN_x4plus.mlpackage"
+sys.path.insert(0, str(CODEFORMER / "basicsr"))
 sys.path.insert(0, str(CODEFORMER))
 
 from basicsr.archs.rrdbnet_arch import RRDBNet
