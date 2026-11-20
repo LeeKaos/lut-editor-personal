@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CODEFORMER = ROOT / "CodeFormer"
 WEIGHTS = CODEFORMER / "weights" / "CodeFormer" / "codeformer.pth"
 OUT = ROOT / "artifacts" / "CodeFormer.mlpackage"
+sys.path.insert(0, str(CODEFORMER / "basicsr"))
 sys.path.insert(0, str(CODEFORMER))
 
 # Importing this module registers the CodeFormer architecture in BasicSR.
