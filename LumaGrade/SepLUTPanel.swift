@@ -220,7 +220,7 @@ struct SepLUTPanel: View {
                     imageTile(title: "GİRİŞ", image: sourceImage)
                     imageTile(title: "SEPLUT", image: outputPreview)
                 }
-                .frame(height: 104)
+                .frame(height: previewTileHeight)
 
                 Text("SepLUT küçük bir önizlemeden içeriğe özel 1D/3D LUT üretir. CNN küçük girdide çalışır; renk tablosu görüntünün tam çözünürlüğüne Core Image ile uygulanır.")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.62)).fixedSize(horizontal: false, vertical: true)
@@ -282,8 +282,10 @@ struct SepLUTPanel: View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.055))
             if let image {
-                Image(uiImage: image).resizable().scaledToFill().frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped().clipShape(RoundedRectangle(cornerRadius: 12))
+                // Fit the whole frame inside each card. Fill crops most of a
+                // portrait 9:16 image when two previews share the available width.
+                Image(uiImage: image).resizable().scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Image(systemName: isVideo ? "video" : "photo").foregroundStyle(.white.opacity(0.35))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -292,6 +294,13 @@ struct SepLUTPanel: View {
                 .background(.black.opacity(0.65), in: Capsule()).padding(6)
         }
         .frame(maxWidth: .infinity).clipped()
+    }
+
+    private var previewTileHeight: CGFloat {
+        guard let image = sourceImage else { return 104 }
+        let width = CGFloat(image.cgImage?.width ?? Int(image.size.width * image.scale))
+        let height = CGFloat(image.cgImage?.height ?? Int(image.size.height * image.scale))
+        return width > 0 && height / width > 1.25 ? 168 : 104
     }
 
     private func run() {
