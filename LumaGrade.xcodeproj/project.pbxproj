@@ -30,7 +30,7 @@
   A101 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaGradeApp.swift; sourceTree = "<group>"; };
   A102 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
   A108 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnginePanel.swift; sourceTree = "<group>"; };
-  A109 = {isa = PBXFileReference; lastKnownFileType = file.mlmodel; path = ZeroDCE.mlmodel; sourceTree = "<group>"; };
+  A109 = {isa = PBXFileReference; lastKnownFileType = file.mlmodel; path = Models/ZeroDCE.mlmodel; sourceTree = "<group>"; };
   A103 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
   A104 = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumaGrade.entitlements; sourceTree = "<group>"; };
   A105 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LumaGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
