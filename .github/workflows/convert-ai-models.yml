@@ -35,6 +35,22 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/sczhou/CodeFormer.git
 
+      - name: Generate BasicSR version module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          package = Path("CodeFormer/basicsr")
+          version = (package / "VERSION").read_text().strip()
+          parts = tuple(int(part) for part in version.split("."))
+          (package / "version.py").write_text(
+              f"__version__ = {version!r}\n"
+              f"__gitsha__ = 'unknown'\n"
+              f"version_info = {parts!r}\n",
+              encoding="utf-8",
+          )
+          print(f"Generated BasicSR version module: {version}")
+          PY
+
       - name: Download official model checkpoints
         run: |
           mkdir -p CodeFormer/weights/CodeFormer weights
