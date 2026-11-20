@@ -13,6 +13,14 @@ import torch
 from PIL import Image
 
 
+class InferenceSign(torch.nn.Module):
+    """Inference-equivalent replacement for the upstream training-only STE."""
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        # The upstream autograd.Function's forward is exactly torch.sign(value).
+        return torch.sign(value)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True, help="Cloned deeplpf-image-enhancement repository")
@@ -31,6 +39,9 @@ def main() -> None:
     network = model.DeepLPFNet().cpu().eval()
     state = torch.load(checkpoint, map_location="cpu", weights_only=True)
     network.load_state_dict(state, strict=True)
+    # Core ML exports the custom autograd.Function as an unsupported PythonOp.
+    # Its backward is training-only; preserving its exact forward makes export safe.
+    network.deeplpfnet.graduated_filter.bin_layer = InferenceSign()
 
     sample = torch.rand(1, 3, 512, 512, dtype=torch.float32)
     with torch.inference_mode():
