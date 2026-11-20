@@ -210,6 +210,26 @@ struct EditorView: View {
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     private static let imageContext = CIContext(options: [.cacheIntermediates: false])
+    // A seeded texture keeps film grain stable between video frames instead of flickering.
+    private static let grainTexture: CIImage = {
+        let width = 512
+        let height = 512
+        var state: UInt32 = 0x00C0FFEE
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        for pixel in 0..<(width * height) {
+            state = 1_664_525 &* state &+ 1_013_904_223
+            let sample = UInt8(112 + ((state >> 24) % 33))
+            let offset = pixel * 4
+            bytes[offset] = sample
+            bytes[offset + 1] = sample
+            bytes[offset + 2] = sample
+        }
+        let data = Data(bytes)
+        return CIImage(bitmapData: data, bytesPerRow: width * 4,
+                       size: CGSize(width: width, height: height),
+                       format: .RGBA8,
+                       colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+    }()
 
     init(initialMediaURL: URL? = nil, onClose: (() -> Void)? = nil) {
         self.initialMediaURL = initialMediaURL
@@ -1154,17 +1174,22 @@ struct EditorView: View {
                 image = filter.outputImage ?? image
             }
         case .grain:
-            if let noise = CIFilter(name: "CIRandomGenerator")?.outputImage?.cropped(to: source.extent),
-               let controls = CIFilter(name: "CIColorControls"), let blend = CIFilter(name: "CISoftLightBlendMode"),
+            let extent = source.extent
+            let noise = Self.grainTexture
+                .transformed(by: CGAffineTransform(scaleX: extent.width / 512, y: extent.height / 512))
+                .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+                .cropped(to: extent)
+            if let controls = CIFilter(name: "CIColorControls"),
+               let blend = CIFilter(name: "CISoftLightBlendMode"),
                let mix = CIFilter(name: "CIDissolveTransition") {
                 controls.setValue(noise, forKey: kCIInputImageKey)
                 controls.setValue(0, forKey: kCIInputSaturationKey)
-                controls.setValue(0.55 + settings.roughness * 0.8, forKey: kCIInputContrastKey)
+                controls.setValue(0.7 + settings.roughness * 0.55, forKey: kCIInputContrastKey)
                 blend.setValue(controls.outputImage, forKey: kCIInputImageKey)
                 blend.setValue(image, forKey: kCIInputBackgroundImageKey)
                 mix.setValue(image, forKey: "inputImage")
-                mix.setValue(blend.outputImage, forKey: "inputTargetImage")
-                mix.setValue(amount * 0.22, forKey: "inputTime")
+                mix.setValue(blend.outputImage ?? image, forKey: "inputTargetImage")
+                mix.setValue(amount * 0.18, forKey: "inputTime")
                 image = mix.outputImage ?? image
             }
         case .halation:
