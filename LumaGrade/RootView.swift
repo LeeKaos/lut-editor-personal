@@ -105,6 +105,32 @@ enum CustomLUTStore {
         }
         return destination
     }
+    static func saveGeneratedCube(_ lut: CubeLUT) throws -> URL {
+        guard lut.dimension > 1, lut.values.count == lut.dimension * lut.dimension * lut.dimension * 3 else {
+            throw MediaImportError.invalidLUT
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        let baseName = "SepLUT Auto \(formatter.string(from: .now))"
+        let destination = directory.appendingPathComponent(baseName).appendingPathExtension("cube")
+        var lines = ["TITLE \"SepLUT Auto\"", "LUT_3D_SIZE \(lut.dimension)", "DOMAIN_MIN 0 0 0", "DOMAIN_MAX 1 1 1"]
+        lines.reserveCapacity(4 + lut.dimension * lut.dimension * lut.dimension)
+        for offset in stride(from: 0, to: lut.values.count, by: 3) {
+            lines.append(String(
+                format: "%.8f %.8f %.8f",
+                locale: Locale(identifier: "en_US_POSIX"),
+                lut.values[offset], lut.values[offset + 1], lut.values[offset + 2]
+            ))
+        }
+        try (lines.joined(separator: "\n") + "\n").write(to: destination, atomically: true, encoding: .utf8)
+        guard CubeLUT.load(url: destination) != nil else {
+            try? FileManager.default.removeItem(at: destination)
+            throw MediaImportError.invalidLUT
+        }
+        return destination
+    }
     static func loadAll() -> [(String, String, URL)] {
         guard let urls = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return [] }
         return urls.filter { $0.pathExtension.lowercased() == "cube" }
@@ -716,7 +742,7 @@ private struct MediaProjectThumbnail: View {
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
     @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
-    @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?; @State private var deepLPFError: String?
+    @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?; @State private var deepLPFError: String?; @State private var sepLUTError: String?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var showingPresets = false
     @State private var favoriteLUTNames = Set(UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteLUTs") ?? [])
@@ -743,6 +769,7 @@ struct EditorView: View {
                     editorTab("Ayarla", symbol: "slider.horizontal.3", value: 1)
                     editorTab("Efektler", symbol: "sparkles", value: 2)
                     editorTab("Özel", symbol: "wand.and.stars", value: 3)
+                    editorTab("SepLUT", symbol: "cube.transparent", value: 4)
                 }
                 .padding(4)
                 .background(Color(red: 0.27, green: 0.27, blue: 0.29), in: Capsule())
@@ -835,6 +862,9 @@ struct EditorView: View {
             .alert("DeepLPF sonucu", isPresented: Binding(get: { deepLPFError != nil }, set: { if !$0 { deepLPFError = nil } })) {
                 Button("Tamam", role: .cancel) { deepLPFError = nil }
             } message: { Text(deepLPFError ?? "") }
+            .alert("SepLUT", isPresented: Binding(get: { sepLUTError != nil }, set: { if !$0 { sepLUTError = nil } })) {
+                Button("Tamam", role: .cancel) { sepLUTError = nil }
+            } message: { Text(sepLUTError ?? "") }
         }
     }
     private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
@@ -888,7 +918,8 @@ struct EditorView: View {
             }
             else if isVideo { ProgressView("Video yükleniyor") }
             else if let source = library.image(for: project) {
-                let rendered = showingOriginal ? source : ImageRenderer.grade(source, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
+                let previewSource = ImageRenderer.resized(source, resolution: "540p")
+                let rendered = showingOriginal ? previewSource : ImageRenderer.grade(previewSource, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
                 Image(uiImage: rendered).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 18))
                     .onLongPressGesture(minimumDuration: 0.12, pressing: { pressing in showingOriginal = pressing }, perform: {})
                     .overlay(alignment: .top) { if showingOriginal { Text("ORİJİNAL").font(.caption.bold()).padding(8).background(.black.opacity(0.7), in: Capsule()).padding(.top, 10) } }
@@ -971,13 +1002,22 @@ struct EditorView: View {
                 isVideo: isVideo,
                 onApply: applyDeepLPFResult
             )
+        case 4:
+            SepLUTPanel(
+                sourceImage: isVideo ? nil : library.image(for: project).map { ImageRenderer.resized($0, resolution: "540p") },
+                isVideo: isVideo,
+                settings: project.settings,
+                sourceLUT: sourceLUT,
+                onApply: applySepLUT
+            )
         default:
             EmptyView()
         }
     }
     private var deepLPFInputImage: UIImage? {
         guard !isVideo, let image = library.image(for: project) else { return nil }
-        return ImageRenderer.grade(image, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
+        let previewSource = ImageRenderer.resized(image, resolution: "540p")
+        return ImageRenderer.grade(previewSource, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
     }
     private func applyDeepLPFResult(_ image: UIImage) {
         guard let data = image.jpegData(compressionQuality: 0.98) else {
@@ -994,6 +1034,18 @@ struct EditorView: View {
             deepLPFError = "DeepLPF sonucu yeni projeye eklenemedi: \(error.localizedDescription)"
         }
     }
+    private func applySepLUT(_ lut: CubeLUT, intensity: Double) {
+        do {
+            let url = try CustomLUTStore.saveGeneratedCube(lut)
+            importedLUT = lut
+            project.settings.customLUTFileName = url.lastPathComponent
+            project.settings.lutName = "SepLUT Auto"
+            project.settings.intensity = intensity
+            bundledLUTs.append(("Özel", url.deletingPathExtension().lastPathComponent, url))
+        } catch {
+            sepLUTError = "SepLUT tablosu projeye eklenemedi: \(error.localizedDescription)"
+        }
+    }
     private func exportToPhotos() {
         if isVideo { exportTrimmedVideo(toPhotos: true) }
         else { exportStill(toPhotos: true) }
@@ -1003,28 +1055,41 @@ struct EditorView: View {
         else { exportStill(toPhotos: false) }
     }
     @MainActor private func exportStill(toPhotos: Bool) {
-        guard let image = library.image(for: project) else { return }
+        let imageURL = library.videoURL(for: project)
         let settings = project.settings; let lut = importedLUT; let profileLUT = sourceLUT
         isExporting = true; exportProgress = 0.04
         Task { @MainActor in
             do {
                 await Task.yield()
-                let output = await Task.detached(priority: .userInitiated) {
-                    let graded = ImageRenderer.grade(image, settings: settings, lut: lut, sourceLUT: profileLUT)
-                    return ImageRenderer.resized(graded, resolution: settings.exportResolution)
+                let url = try await Task.detached(priority: .userInitiated) {
+                    guard let source = CIImage(contentsOf: imageURL, options: [.applyOrientationProperty: true]),
+                          let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+                        throw CocoaError(.fileReadCorruptFile)
+                    }
+                    let graded = ImageRenderer.grade(source, settings: settings, lut: lut, sourceLUT: profileLUT)
+                    let output = ImageRenderer.resized(graded, resolution: settings.exportResolution)
+                    let destination = FileManager.default.temporaryDirectory.appendingPathComponent("LumaGrade-\(UUID().uuidString).jpg")
+                    try ImageRenderer.context.writeJPEGRepresentation(
+                        of: output,
+                        to: destination,
+                        colorSpace: colorSpace,
+                        options: [.lossyCompressionQuality: 0.98]
+                    )
+                    return destination
                 }.value
                 exportProgress = 0.8
                 if toPhotos {
                     PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-                        guard status == .authorized || status == .limited else { DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
-                        PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: output) } completionHandler: { saved, error in
+                        guard status == .authorized || status == .limited else { try? FileManager.default.removeItem(at: url); DispatchQueue.main.async { isExporting = false; exportMessage = "Fotoğraf arşivine ekleme izni verilmedi." }; return }
+                        PHPhotoLibrary.shared().performChanges {
+                            let request = PHAssetCreationRequest.forAsset()
+                            request.addResource(with: .photo, fileURL: url, options: nil)
+                        } completionHandler: { saved, error in
+                            try? FileManager.default.removeItem(at: url)
                             DispatchQueue.main.async { isExporting = false; exportProgress = 1; exportMessage = saved ? "Fotoğraf arşive kaydedildi." : (error?.localizedDescription ?? "Fotoğraf kaydedilemedi.") }
                         }
                     }
                 } else {
-                    guard let data = output.jpegData(compressionQuality: 0.98) else { throw CocoaError(.fileWriteUnknown) }
-                    let url = FileManager.default.temporaryDirectory.appendingPathComponent("LumaGrade-\(UUID().uuidString).jpg")
-                    try data.write(to: url, options: .atomic)
                     fileExportURLs = [url]; isExporting = false; exportProgress = 1; showingFileExportPicker = true
                 }
             } catch { isExporting = false; exportProgress = 0; exportMessage = error.localizedDescription }
@@ -1761,6 +1826,19 @@ struct CubeLUT { let dimension: Int; let values: [Float]
 }
 
 enum ImageRenderer { static let context = CIContext()
+    static func resized(_ image: CIImage, resolution: String) -> CIImage {
+        let longestEdge: CGFloat
+        switch resolution {
+        case "540p": longestEdge = 960
+        case "720p": longestEdge = 1280
+        case "1080p": longestEdge = 1920
+        case "1440p": longestEdge = 2560
+        default: return image
+        }
+        let extent = image.extent
+        let factor = min(1, longestEdge / max(extent.width, extent.height))
+        return factor < 1 ? image.transformed(by: CGAffineTransform(scaleX: factor, y: factor)) : image
+    }
     static func resized(_ image: UIImage, resolution: String) -> UIImage {
         let longestEdge: CGFloat
         switch resolution {

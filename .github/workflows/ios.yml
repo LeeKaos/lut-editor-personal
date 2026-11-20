@@ -23,6 +23,12 @@ jobs:
           python Scripts/convert_deeplpf_coreml.py \
             --source "$RUNNER_TEMP/deeplpf-source" \
             --output LumaGrade/DeepLPFModels/DeepLPF.mlpackage
+      - name: Convert SepLUT model to Core ML
+        run: |
+          set -euxo pipefail
+          python Scripts/convert_seplut_coreml.py \
+            --work "$RUNNER_TEMP/seplut" \
+            --output LumaGrade/SepLUTModels/SepLUT.mlpackage
       - name: Prepare compact bundled LUTs
         run: python3 Scripts/prepare_luts.py
       - name: Build unsigned iPhone app
@@ -37,6 +43,12 @@ jobs:
           test -s "$APP_PATH/DeepLPFModels/DeepLPF.mlpackage/Data/com.apple.CoreML/model.mlmodel"
           DEEPLPF_SIZE=$(du -sm "$APP_PATH/DeepLPFModels/DeepLPF.mlpackage" | cut -f1)
           echo "Bundled DeepLPF Core ML size: ${DEEPLPF_SIZE} MB"
+          test -d "$APP_PATH/SepLUTModels/SepLUT.mlpackage"
+          test -s "$APP_PATH/SepLUTModels/SepLUT.mlpackage/Manifest.json"
+          test -s "$APP_PATH/SepLUTModels/SepLUT.mlpackage/Data/com.apple.CoreML/model.mlmodel"
+          test -s "$APP_PATH/SepLUTModels/LICENSE.txt"
+          SEPLUT_SIZE=$(du -sm "$APP_PATH/SepLUTModels/SepLUT.mlpackage" | cut -f1)
+          echo "Bundled SepLUT Core ML size: ${SEPLUT_SIZE} MB"
           plutil -lint "$APP_PATH/Info.plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist")" = "AppIcon"
           find "$APP_PATH" -maxdepth 1 -type f -iname '*appicon*.png' | grep -q .
