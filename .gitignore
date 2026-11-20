@@ -3,3 +3,7 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 build/
+
+/LumaGrade/EngineModels/*.mlmodel
+!/LumaGrade/EngineModels/ZeroDCE.mlmodel
+/LumaGrade/EngineModels/*.mlpackage/

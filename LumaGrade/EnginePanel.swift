@@ -14,7 +14,7 @@ private enum EngineMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .zeroDCE: "Zero-DCE"
-        case .mirnet: "MIRNet"
+        case .mirnet: "MIRNet v2"
         case .faceRestore: "GFPGAN"
         case .realESRGAN: "Real-ESRGAN"
         }
@@ -36,6 +36,14 @@ private enum EngineMode: String, CaseIterable, Identifiable {
         }
     }
     var modelFileName: String { "\(id).mlmodelc" }
+    var bundleModelName: String {
+        switch self {
+        case .zeroDCE: "ZeroDCE"
+        case .mirnet: "MIRNetv2LowLightEnhancement"
+        case .faceRestore: "GFPGAN"
+        case .realESRGAN: "RealESRGAN"
+        }
+    }
 }
 
 private enum EngineModelStore {
@@ -46,8 +54,29 @@ private enum EngineModelStore {
     static func modelURL(for mode: EngineMode) -> URL? {
         let url = directory.appendingPathComponent(mode.modelFileName, isDirectory: true)
         if FileManager.default.fileExists(atPath: url.path) { return url }
-        if mode == .zeroDCE { return Bundle.main.url(forResource: "ZeroDCE", withExtension: "mlmodelc") }
+        return sourceURL(for: mode)
+    }
+    static func sourceURL(for mode: EngineMode) -> URL? {
+        let root = Bundle.main.resourceURL?.appendingPathComponent("EngineModels", isDirectory: true)
+        guard let root else { return nil }
+        for ext in ["mlmodelc", "mlmodel", "mlpackage"] {
+            let candidate = root.appendingPathComponent(mode.bundleModelName).appendingPathExtension(ext)
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
         return nil
+    }
+    static func preparedModelURL(for mode: EngineMode) async throws -> URL? {
+        let destination = directory.appendingPathComponent(mode.modelFileName, isDirectory: true)
+        if FileManager.default.fileExists(atPath: destination.path) { return destination }
+        guard let source = sourceURL(for: mode) else { return nil }
+        if source.pathExtension == "mlmodelc" { return source }
+        let compiled = try await Task.detached(priority: .userInitiated) {
+            try MLModel.compileModel(at: source)
+        }.value
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: compiled, to: destination)
+        return destination
     }
     static func install(from source: URL, for mode: EngineMode) async throws {
         let hasScope = source.startAccessingSecurityScopedResource()
@@ -77,7 +106,7 @@ private struct VisionCoreMLProvider: EngineProvider {
     let mode: EngineMode
 
     func process(_ image: UIImage) async throws -> UIImage {
-        guard let modelURL = EngineModelStore.modelURL(for: mode) else {
+        guard let modelURL = try await EngineModelStore.preparedModelURL(for: mode) else {
             throw EngineError.modelMissing(mode.title)
         }
         return try await Task.detached(priority: .userInitiated) {

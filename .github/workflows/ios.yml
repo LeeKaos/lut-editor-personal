@@ -8,10 +8,15 @@ on:
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Prepare compact bundled LUTs
         run: python3 Scripts/prepare_luts.py
+      - name: Download and quantize Core ML Engine models
+        run: |
+          python3 -m pip install --disable-pip-version-check coremltools==8.3 gdown==5.2.0
+          python3 Scripts/prepare_engine_models.py
       - name: Build unsigned iPhone app
         run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
       - name: Verify iPhone app package metadata
@@ -23,7 +28,10 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist")" = "AppIcon"
           find "$APP_PATH" -maxdepth 1 -type f -iname '*appicon*.png' | grep -q .
           test -d "$APP_PATH/LUTs"
-          test -d "$APP_PATH/ZeroDCE.mlmodelc"
+          test -d "$APP_PATH/EngineModels"
+          for MODEL in ZeroDCE MIRNetv2LowLightEnhancement GFPGAN RealESRGAN; do
+            find "$APP_PATH/EngineModels" -maxdepth 1 \( -name "$MODEL.mlmodel" -o -name "$MODEL.mlpackage" \) -print -quit | grep -q .
+          done
           LUT_COUNT=$(find "$APP_PATH/LUTs" -type f -name '*.lutf' | wc -l | tr -d ' ')
           echo "Bundled LUT count: $LUT_COUNT"
           test "$LUT_COUNT" -eq 101
