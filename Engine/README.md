@@ -1,10 +1,10 @@
 # LumaGrade Engine
 
-Engine runs image-to-image Core ML models locally on the iPhone. It has separate modes for low-light enhancement (Zero-DCE), restoration (MIRNet), face restoration (GFPGAN), and upscaling (Real-ESRGAN). Models are imported by the user and compiled in the app sandbox; they are not bundled in the IPA.
+Engine runs image-to-image Core ML models locally on the iPhone. It has separate modes for low-light enhancement (Zero-DCE), restoration (MIRNet), face restoration (GFPGAN), and upscaling (Real-ESRGAN). The converted Zero-DCE model is bundled; the other model files are imported by the user and compiled in the app sandbox so they do not inflate every IPA installation.
 
 ## Adding a model
 
-1. Obtain or convert a model to `.mlmodel` or `.mlpackage` on macOS with a compatible version of `coremltools`.
+1. Obtain or convert a model to `.mlmodel` or `.mlpackage` on macOS with a compatible version of `coremltools`. Zero-DCE is ready to run without import.
 2. In the editor, open **Engine**, select the matching mode, and choose **Core ML modeli ekle**.
 3. Let iOS compile it. Engine keeps the compiled model in `Documents/EngineModels` and runs inference locally.
 

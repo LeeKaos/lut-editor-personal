@@ -4,6 +4,7 @@
   A001 /* LumaGradeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A101; };
   A002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102; };
   A008 /* EnginePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A108; };
+  A009 /* ZeroDCE.mlmodel in Sources */ = {isa = PBXBuildFile; fileRef = A109; };
   A003 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = A106; };
   A004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A107; };
   C001 /* Icon-20@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D001; };
@@ -29,6 +30,7 @@
   A101 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaGradeApp.swift; sourceTree = "<group>"; };
   A102 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
   A108 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnginePanel.swift; sourceTree = "<group>"; };
+  A109 = {isa = PBXFileReference; lastKnownFileType = file.mlmodel; path = ZeroDCE.mlmodel; sourceTree = "<group>"; };
   A103 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
   A104 = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumaGrade.entitlements; sourceTree = "<group>"; };
   A105 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = LumaGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -55,7 +57,7 @@
 /* End PBXFileReference section */
 /* Begin PBXGroup section */
   A201 = {isa = PBXGroup; children = (A202, A203); sourceTree = "<group>"; };
-  A202 = {isa = PBXGroup; children = (A101, A102, A108, A103, A104, A106, A107, D001, D002, D003, D004, D005, D006, D007, D008, D009, D00A, D00B, D00C, D00D, D00E, D00F, D010, D011, D012); path = LumaGrade; sourceTree = "<group>"; };
+  A202 = {isa = PBXGroup; children = (A101, A102, A108, A109, A103, A104, A106, A107, D001, D002, D003, D004, D005, D006, D007, D008, D009, D00A, D00B, D00C, D00D, D00E, D00F, D010, D011, D012); path = LumaGrade; sourceTree = "<group>"; };
   A203 = {isa = PBXGroup; children = (A105); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
@@ -68,7 +70,7 @@
   A501 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A003, A004, C001, C002, C003, C004, C005, C006, C007, C008, C009, C00A, C00B, C00C, C00D, C00E, C00F, C010, C011, C012); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
-  A502 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A001, A002, A008); runOnlyForDeploymentPostprocessing = 0; };
+  A502 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A001, A002, A008, A009); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 /* Begin PBXFrameworksBuildPhase section */
   A503 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
@@ -76,8 +78,8 @@
 /* Begin XCBuildConfiguration section */
   A701 = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; }; name = Debug; };
   A702 = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; }; name = Release; };
-  A703 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 16; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.1.4; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
-  A704 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 16; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.1.4; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+  A703 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 17; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.1.5; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+  A704 = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = LumaGrade/LumaGrade.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 17; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LumaGrade/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"; MARKETING_VERSION = 1.1.5; PRODUCT_BUNDLE_IDENTIFIER = com.yourteam.lumagrade; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
   A401 = {isa = XCConfigurationList; buildConfigurations = (A703, A704); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };

@@ -45,7 +45,9 @@ private enum EngineModelStore {
     }
     static func modelURL(for mode: EngineMode) -> URL? {
         let url = directory.appendingPathComponent(mode.modelFileName, isDirectory: true)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        if mode == .zeroDCE { return Bundle.main.url(forResource: "ZeroDCE", withExtension: "mlmodelc") }
+        return nil
     }
     static func install(from source: URL, for mode: EngineMode) async throws {
         let hasScope = source.startAccessingSecurityScopedResource()

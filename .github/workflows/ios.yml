@@ -23,6 +23,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist")" = "AppIcon"
           find "$APP_PATH" -maxdepth 1 -type f -iname '*appicon*.png' | grep -q .
           test -d "$APP_PATH/LUTs"
+          test -d "$APP_PATH/ZeroDCE.mlmodelc"
           LUT_COUNT=$(find "$APP_PATH/LUTs" -type f -name '*.lutf' | wc -l | tr -d ' ')
           echo "Bundled LUT count: $LUT_COUNT"
           test "$LUT_COUNT" -eq 101
