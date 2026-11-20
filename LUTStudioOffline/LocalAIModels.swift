@@ -1,3 +1,4 @@
+import Combine
 import CoreML
 import CoreImage
 import CoreVideo
@@ -69,7 +70,7 @@ final class LocalAIModelStore: ObservableObject {
         return UIImage(cgImage: result, scale: image.scale, orientation: .up)
     }
 
-    private static func copyModelToApplicationSupport(_ source: URL, kind: LocalAIModelKind) throws -> URL {
+    private nonisolated static func copyModelToApplicationSupport(_ source: URL, kind: LocalAIModelKind) throws -> URL {
         let ext = source.pathExtension.lowercased()
         guard ["mlpackage", "mlmodel", "mlmodelc"].contains(ext) else {
             throw LocalAIError.unsupportedModelFile
@@ -87,6 +88,71 @@ final class LocalAIModelStore: ObservableObject {
 
     private nonisolated static func predict(model: MLModel, image: CGImage,
                                             kind: LocalAIModelKind) throws -> CGImage {
+        if kind == .codeFormer {
+            return try restoreDetectedFaces(model: model, image: image)
+        }
+        return try predictSingle(model: model, image: image)
+    }
+
+    private nonisolated static func restoreDetectedFaces(model: MLModel, image: CGImage) throws -> CGImage {
+        let request = VNDetectFaceRectanglesRequest()
+        try VNImageRequestHandler(cgImage: image).perform([request])
+        guard let faces = request.results, !faces.isEmpty else {
+            throw LocalAIError.noFaceDetected
+        }
+
+        let source = CIImage(cgImage: image)
+        let imageBounds = source.extent
+        var composed = source
+        let context = CIContext(options: [.cacheIntermediates: false])
+
+        for face in faces {
+            let box = face.boundingBox
+            let faceRect = CGRect(x: box.minX * imageBounds.width,
+                                  y: box.minY * imageBounds.height,
+                                  width: box.width * imageBounds.width,
+                                  height: box.height * imageBounds.height)
+            let side = min(max(faceRect.width, faceRect.height) * 1.8,
+                           min(imageBounds.width, imageBounds.height))
+            let center = CGPoint(x: faceRect.midX, y: faceRect.midY)
+            let cropRect = CGRect(x: center.x - side / 2, y: center.y - side / 2,
+                                  width: side, height: side).intersection(imageBounds)
+            guard cropRect.width > 8, cropRect.height > 8,
+                  let cropCG = context.createCGImage(source.cropped(to: cropRect), from: cropRect) else {
+                continue
+            }
+
+            let restoredCG = try predictSingle(model: model, image: cropCG)
+            let restored = CIImage(cgImage: restoredCG)
+                .transformed(by: CGAffineTransform(scaleX: cropRect.width / CGFloat(restoredCG.width),
+                                                   y: cropRect.height / CGFloat(restoredCG.height)))
+                .transformed(by: CGAffineTransform(translationX: cropRect.minX, y: cropRect.minY))
+                .cropped(to: cropRect)
+            let originalCrop = source.cropped(to: cropRect)
+            let mask = CIFilter(name: "CIRadialGradient", parameters: [
+                "inputCenter": CIVector(x: cropRect.midX, y: cropRect.midY),
+                "inputRadius0": min(cropRect.width, cropRect.height) * 0.18,
+                "inputRadius1": max(cropRect.width, cropRect.height) * 0.58,
+                "inputColor0": CIColor.white,
+                "inputColor1": CIColor.clear
+            ])?.outputImage?.cropped(to: cropRect)
+            if let mask, let blend = CIFilter(name: "CIBlendWithMask") {
+                blend.setValue(restored, forKey: kCIInputImageKey)
+                blend.setValue(originalCrop, forKey: kCIInputBackgroundImageKey)
+                blend.setValue(mask, forKey: kCIInputMaskImageKey)
+                composed = (blend.outputImage ?? restored).composited(over: composed)
+            } else {
+                composed = restored.composited(over: composed)
+            }
+        }
+
+        guard let result = context.createCGImage(composed.cropped(to: imageBounds), from: imageBounds) else {
+            throw LocalAIError.invalidModelOutput
+        }
+        return result
+    }
+
+    private nonisolated static func predictSingle(model: MLModel, image: CGImage) throws -> CGImage {
         let source = CIImage(cgImage: image)
         let inputDescriptions = model.modelDescription.inputDescriptionsByName
         guard let inputName = inputDescriptions.keys.sorted().first(where: {
@@ -176,7 +242,7 @@ final class LocalAIModelStore: ObservableObject {
         guard channels >= 3, width > 0, height > 0 else {
             throw LocalAIError.incompatibleModel("Model RGB tensor biçiminde değil.")
         }
-        let array = try MLMultiArray(shape: shape.map(NSNumber.init(value:)), dataType: dataType)
+        let array = try MLMultiArray(shape: shape.map { NSNumber(value: $0) }, dataType: dataType)
         let buffer = try makePixelBuffer(from: image, width: width, height: height)
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
@@ -254,6 +320,7 @@ enum LocalAIError: LocalizedError {
     case invalidImage
     case invalidModelOutput
     case incompatibleModel(String)
+    case noFaceDetected
 
     var errorDescription: String? {
         switch self {
@@ -267,6 +334,8 @@ enum LocalAIError: LocalizedError {
             return "Model geçerli bir görüntü çıktısı üretmedi."
         case .incompatibleModel(let reason):
             return reason
+        case .noFaceDetected:
+            return "Fotoğrafta CodeFormer için uygun bir yüz algılanamadı."
         }
     }
 }
