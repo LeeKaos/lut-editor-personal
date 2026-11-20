@@ -57,7 +57,6 @@ jobs:
           from pathlib import Path
           path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
           source = path.read_text(encoding="utf-8")
-
           encoder_old = "enc_feat_dict[str(x.shape[-1])] = x.clone()"
           generator_old = "f_size = str(x.shape[-1])"
           if source.count(encoder_old) != 1 or source.count(generator_old) != 1:
@@ -66,7 +65,6 @@ jobs:
                   f"encoder expression count={source.count(encoder_old)}, "
                   f"generator expression count={source.count(generator_old)}"
               )
-
           encoder_new = (
               'enc_feat_dict[{2: "512", 5: "256", 8: "128", '
               '11: "64", 14: "32"}[i]] = x.clone()'
@@ -88,10 +86,10 @@ jobs:
           source = path.read_text(encoding="utf-8")
           old = "    feat_var = feat.view(b, c, -1).var(dim=2) + eps"
           new = """    flat = feat.view(b, c, -1)
-              feat_mean = flat.mean(dim=2)
-              centered = flat - feat_mean.unsqueeze(-1)
-              # Match torch.var's default unbiased (N-1) estimator without aten::var.
-              feat_var = (centered * centered).sum(dim=2) / (flat.shape[2] - 1) + eps"""
+          feat_mean = flat.mean(dim=2)
+          centered = flat - feat_mean.unsqueeze(-1)
+          # Match torch.var's default unbiased (N-1) estimator without aten::var.
+          feat_var = (centered * centered).sum(dim=2) / (flat.shape[2] - 1) + eps"""
           if source.count(old) != 1:
               raise SystemExit(
                   f"Expected one CodeFormer AdaIN variance expression, found {source.count(old)}"
