@@ -91,7 +91,88 @@ final class LocalAIModelStore: ObservableObject {
         if kind == .codeFormer {
             return try restoreDetectedFaces(model: model, image: image)
         }
-        return try predictSingle(model: model, image: image)
+        return try upscaleInTiles(model: model, image: image)
+    }
+
+    private nonisolated static func upscaleInTiles(model: MLModel, image: CGImage) throws -> CGImage {
+        let descriptions = model.modelDescription.inputDescriptionsByName
+        guard let description = descriptions.values.first(where: {
+            $0.type == .image || $0.type == .multiArray
+        }) else { throw LocalAIError.incompatibleModel("Real-ESRGAN giriş tensörü bulunamadı.") }
+
+        let tileWidth: Int
+        let tileHeight: Int
+        if let constraint = description.imageConstraint {
+            tileWidth = constraint.pixelsWide
+            tileHeight = constraint.pixelsHigh
+        } else if let constraint = description.multiArrayConstraint {
+            let shape = constraint.shape.map(\.intValue)
+            guard shape.count >= 3 else { throw LocalAIError.incompatibleModel("Real-ESRGAN giriş boyutu desteklenmiyor.") }
+            let channelFirst = shape.count == 4 ? shape[1] == 3 : shape[0] == 3
+            tileHeight = shape.count == 4 ? (channelFirst ? shape[2] : shape[1]) : (channelFirst ? shape[1] : shape[0])
+            tileWidth = shape.count == 4 ? (channelFirst ? shape[3] : shape[2]) : (channelFirst ? shape[2] : shape[1])
+        } else {
+            throw LocalAIError.incompatibleModel("Real-ESRGAN giriş biçimi desteklenmiyor.")
+        }
+        guard tileWidth > 0, tileHeight > 0 else { throw LocalAIError.incompatibleModel("Model giriş ölçüleri geçersiz.") }
+
+        let source = CIImage(cgImage: image)
+        let width = Int(source.extent.width)
+        let height = Int(source.extent.height)
+        let overlapX = min(16, max(0, tileWidth / 8))
+        let overlapY = min(16, max(0, tileHeight / 8))
+        let xs = tileOrigins(length: width, tile: tileWidth, overlap: overlapX)
+        let ys = tileOrigins(length: height, tile: tileHeight, overlap: overlapY)
+        let context = CIContext(options: [.cacheIntermediates: false])
+        var canvas: CIImage?
+        var scaleX: CGFloat = 1
+        var scaleY: CGFloat = 1
+
+        for row in ys.indices {
+            for column in xs.indices {
+                let x = xs[column]
+                let y = ys[row]
+                let tileRect = CGRect(x: x, y: y, width: tileWidth, height: tileHeight)
+                let tile = source.clampedToExtent().cropped(to: tileRect)
+                guard let tileCG = context.createCGImage(tile, from: tileRect) else {
+                    throw LocalAIError.invalidImage
+                }
+                let outputCG = try predictSingle(model: model, image: tileCG)
+                scaleX = CGFloat(outputCG.width) / CGFloat(tileWidth)
+                scaleY = CGFloat(outputCG.height) / CGFloat(tileHeight)
+
+                let left = column == 0 ? 0 : (xs[column - 1] + tileWidth + x) / 2
+                let right = column == xs.count - 1 ? width : (x + tileWidth + xs[column + 1]) / 2
+                let bottom = row == 0 ? 0 : (ys[row - 1] + tileHeight + y) / 2
+                let top = row == ys.count - 1 ? height : (y + tileHeight + ys[row + 1]) / 2
+                let localCrop = CGRect(x: CGFloat(left - x) * scaleX,
+                                       y: CGFloat(bottom - y) * scaleY,
+                                       width: CGFloat(right - left) * scaleX,
+                                       height: CGFloat(top - bottom) * scaleY)
+                let placed = CIImage(cgImage: outputCG)
+                    .cropped(to: localCrop)
+                    .transformed(by: CGAffineTransform(translationX: CGFloat(left) * scaleX - localCrop.minX,
+                                                       y: CGFloat(bottom) * scaleY - localCrop.minY))
+                let outputBounds = CGRect(x: 0, y: 0, width: CGFloat(width) * scaleX,
+                                          height: CGFloat(height) * scaleY)
+                let base = canvas ?? CIImage(color: .clear).cropped(to: outputBounds)
+                canvas = placed.composited(over: base)
+            }
+        }
+        guard let result = canvas,
+              let output = context.createCGImage(result, from: result.extent) else {
+            throw LocalAIError.invalidModelOutput
+        }
+        return output
+    }
+
+    private nonisolated static func tileOrigins(length: Int, tile: Int, overlap: Int) -> [Int] {
+        guard length > tile else { return [0] }
+        let stride = max(1, tile - overlap * 2)
+        var origins = Array(Swift.stride(from: 0, to: max(1, length - tile + 1), by: stride))
+        let last = length - tile
+        if origins.last != last { origins.append(last) }
+        return origins
     }
 
     private nonisolated static func restoreDetectedFaces(model: MLModel, image: CGImage) throws -> CGImage {
