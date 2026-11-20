@@ -42,20 +42,48 @@ final class LocalAIModelStore: ObservableObject {
 
         let destination = try Self.copyModelToApplicationSupport(source, kind: kind)
         let model = try await Task.detached(priority: .utility) {
-            let compiledURL: URL
-            if destination.pathExtension == "mlmodelc" {
-                compiledURL = destination
-            } else {
-                compiledURL = try MLModel.compileModel(at: destination)
-            }
-            let configuration = MLModelConfiguration()
-            configuration.computeUnits = .all
-            return try MLModel(contentsOf: compiledURL, configuration: configuration)
+            try Self.loadModel(at: destination)
         }.value
 
         models[kind] = model
         loadedKinds.insert(kind)
         modelNames[kind] = source.deletingPathExtension().lastPathComponent
+    }
+
+    func loadInstalledModels() async {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("LocalAIModels", isDirectory: true)
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for kind in LocalAIModelKind.allCases {
+            guard let url = files.first(where: {
+                $0.deletingPathExtension().lastPathComponent == kind.rawValue
+            }) else { continue }
+            do {
+                let model = try await Task.detached(priority: .utility) {
+                    try Self.loadModel(at: url)
+                }.value
+                models[kind] = model
+                loadedKinds.insert(kind)
+                modelNames[kind] = url.deletingPathExtension().lastPathComponent
+            } catch {
+                modelNames[kind] = "Yüklenemedi: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private nonisolated static func loadModel(at url: URL) throws -> MLModel {
+        let compiledURL: URL
+        if url.pathExtension == "mlmodelc" {
+            compiledURL = url
+        } else {
+            compiledURL = try MLModel.compileModel(at: url)
+        }
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = .all
+        return try MLModel(contentsOf: compiledURL, configuration: configuration)
     }
 
     func enhance(_ image: UIImage, using kind: LocalAIModelKind) async throws -> UIImage {
