@@ -85,7 +85,7 @@ jobs:
           path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
           source = path.read_text(encoding="utf-8")
           old = "    feat_var = feat.view(b, c, -1).var(dim=2) + eps"
-          new = "\\n".join([
+          new = "\n".join([
               "    flat = feat.view(b, c, -1)",
               "    feat_mean = flat.mean(dim=2)",
               "    centered = flat - feat_mean.unsqueeze(-1)",
