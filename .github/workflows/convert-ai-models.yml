@@ -51,6 +51,24 @@ jobs:
           print(f"Generated BasicSR version module: {version}")
           PY
 
+      - name: Make CodeFormer feature-size keys static for tracing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
+          source = path.read_text(encoding="utf-8")
+          needle = "f_size = str(x.shape[-1])"
+          if source.count(needle) != 2:
+              raise SystemExit(
+                  f"Expected exactly 2 feature-size expressions, found {source.count(needle)}"
+              )
+          encoder = 'f_size = {2: "512", 5: "256", 8: "128", 11: "64", 14: "32"}[i]'
+          generator = 'f_size = {9: "32", 12: "64", 15: "128", 18: "256"}[i]'
+          source = source.replace(needle, encoder, 1).replace(needle, generator, 1)
+          path.write_text(source, encoding="utf-8")
+          print("Patched encoder/generator feature-size lookups to static block-index keys.")
+          PY
+
       - name: Download official model checkpoints
         run: |
           mkdir -p CodeFormer/weights/CodeFormer weights
