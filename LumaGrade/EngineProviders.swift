@@ -85,8 +85,9 @@ protocol OptionalEngineProvider {
 
 struct AppleVisionSceneAnalyzer: EngineSceneAnalyzing {
     func analyze(_ image: UIImage) throws -> EngineSceneAnalysis {
+        guard let cgImage = image.cgImage else { throw EngineProviderError.invalidImage }
         let request = VNClassifyImageRequest()
-        try VNImageRequestHandler(uiImage: image, options: [:]).perform([request])
+        try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
         let observations = (request.results ?? []).filter { $0.confidence >= 0.06 }
         let labels = observations.prefix(5).map {
             $0.identifier.replacingOccurrences(of: "_", with: " ")
@@ -228,10 +229,12 @@ struct InpaintingCoreMLProviderAdapter: OptionalEngineProvider {
 
 enum EngineProviderError: LocalizedError {
     case moduleUnavailable(String)
+    case invalidImage
 
     var errorDescription: String? {
         switch self {
         case .moduleUnavailable(let reason): return reason
+        case .invalidImage: return "Görüntü Vision analizi için okunamadı."
         }
     }
 }
@@ -239,8 +242,8 @@ enum EngineProviderError: LocalizedError {
 private enum EngineImageSizer {
     static func previewImage(_ image: UIImage, maximumDimension: CGFloat) -> UIImage {
         let largestEdge = max(image.size.width, image.size.height)
-        guard largestEdge > maximumDimension, largestEdge > 0 else { return image }
-        let scale = maximumDimension / largestEdge
+        guard largestEdge > 0 else { return image }
+        let scale = min(1, maximumDimension / largestEdge)
         let size = CGSize(width: max(1, image.size.width * scale), height: max(1, image.size.height * scale))
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
