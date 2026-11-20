@@ -214,9 +214,9 @@ struct EditorView: View {
     @State private var aiStatusMessage: String?
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
-    private static let imageContext = CIContext(options: [.cacheIntermediates: false])
+    nonisolated(unsafe) private static let imageContext = CIContext(options: [.cacheIntermediates: false])
     // A seeded texture keeps film grain stable between video frames instead of flickering.
-    private static let grainTexture: CIImage = {
+    nonisolated(unsafe) private static let grainTexture: CIImage = {
         let width = 512
         let height = 512
         var state: UInt32 = 0x00C0FFEE
@@ -254,6 +254,44 @@ struct EditorView: View {
     }
 
     var body: some View {
+        editorContent
+        .fileImporter(isPresented: $isImportingAIModel, allowedContentTypes: [.item],
+                      allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let url):
+                let kind = pendingAIKind
+                Task {
+                    do {
+                        try await localAIModels.installModel(from: url, for: kind)
+                        aiStatusMessage = "\(kind.title) modeli cihaza yüklendi."
+                    } catch {
+                        aiStatusMessage = error.localizedDescription
+                    }
+                }
+            case .failure(let error):
+                aiStatusMessage = error.localizedDescription
+            }
+        }
+        .alert("Yerel AI İşlemi", isPresented: Binding(
+            get: { aiStatusMessage != nil },
+            set: { if !$0 { aiStatusMessage = nil } }
+        )) {
+            Button("Tamam", role: .cancel) { aiStatusMessage = nil }
+        } message: {
+            Text(aiStatusMessage ?? "")
+        }
+        .onDisappear {
+            player?.pause()
+            removeTimeObserver()
+            compositionUpdateTask?.cancel()
+            photoRenderGeneration += 1
+        }
+        .task {
+            await localAIModels.loadInstalledModels()
+        }
+    }
+
+    private var editorContent: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 Color.black
@@ -499,40 +537,6 @@ struct EditorView: View {
                         .background(.black.opacity(0.6), in: Circle())
                 }.padding(20)
             }.preferredColorScheme(.dark)
-        }
-        .fileImporter(isPresented: $isImportingAIModel, allowedContentTypes: [.item],
-                      allowsMultipleSelection: false) { result in
-            switch result {
-            case .success(let url):
-                let kind = pendingAIKind
-                Task {
-                    do {
-                        try await localAIModels.installModel(from: url, for: kind)
-                        aiStatusMessage = "\(kind.title) modeli cihaza yüklendi."
-                    } catch {
-                        aiStatusMessage = error.localizedDescription
-                    }
-                }
-            case .failure(let error):
-                aiStatusMessage = error.localizedDescription
-            }
-        }
-        .alert("Yerel AI İşlemi", isPresented: Binding(
-            get: { aiStatusMessage != nil },
-            set: { if !$0 { aiStatusMessage = nil } }
-        )) {
-            Button("Tamam", role: .cancel) { aiStatusMessage = nil }
-        } message: {
-            Text(aiStatusMessage ?? "")
-        }
-        .onDisappear {
-            player?.pause()
-            removeTimeObserver()
-            compositionUpdateTask?.cancel()
-            photoRenderGeneration += 1
-        }
-        .task {
-            await localAIModels.loadInstalledModels()
         }
     }
 
@@ -1148,7 +1152,7 @@ struct EditorView: View {
         try? data.write(to: settingsFile(for: url), options: .atomic)
     }
 
-    private static func grade(_ source: CIImage, settings: GradeSettings, cube: CubeLUT?) -> CIImage {
+    nonisolated private static func grade(_ source: CIImage, settings: GradeSettings, cube: CubeLUT?) -> CIImage {
         var image = source
          if let cube, settings.lutIntensity > 0,
            let lutFilter = CIFilter(name: "CIColorCubeWithColorSpace") {
@@ -1332,7 +1336,7 @@ struct EditorView: View {
     }
 
     private func runLocalAI(_ kind: LocalAIModelKind) {
-        guard let imageURL, let source = UIImage(contentsOfFile: imageURL.path) else {
+        guard let currentImageURL = imageURL, let source = UIImage(contentsOfFile: currentImageURL.path) else {
             aiStatusMessage = "Önce bir fotoğraf seçmelisin."
             return
         }
