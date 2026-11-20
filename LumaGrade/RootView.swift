@@ -715,7 +715,7 @@ private struct MediaProjectThumbnail: View {
 
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
-    @State private var project: GradeProject; @StateObject private var engineViewModel: EngineViewModel; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
+    @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
     @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var showingPresets = false
@@ -730,7 +730,7 @@ struct EditorView: View {
         return ["Favoriler"] + preferred.filter { available.contains($0) } + available.subtracting(preferred).sorted()
     }
     private var visibleLUTs: [(String, String, URL)] { selectedCategory == "Tümü" ? bundledLUTs : bundledLUTs.filter { $0.0 == selectedCategory } }
-    init(project: GradeProject) { _project = State(initialValue: project); _engineViewModel = StateObject(wrappedValue: EngineViewModel()) }
+    init(project: GradeProject) { _project = State(initialValue: project) }
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -975,8 +975,10 @@ struct EditorView: View {
                 onUndo: undo,
                 onRedo: redo
             )
+        case 4:
+            EmptyView()
         default:
-            EngineView(viewModel: engineViewModel, inputImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT, isVideo: isVideo, onApplySettings: { project.settings = $0 })
+            EmptyView()
         }
     }
     private func exportToPhotos() {
