@@ -10,6 +10,19 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Convert DeepLPF model to Core ML
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy==1.26.4 Pillow==11.1.0 coremltools==9.0 torch==2.7.1
+          git clone --filter=blob:none https://github.com/sjmoran/deeplpf-image-enhancement.git "$RUNNER_TEMP/deeplpf-source"
+          git -C "$RUNNER_TEMP/deeplpf-source" checkout 4faeef6597f299d38acc597df9cfe970f8d90ca2
+          python Scripts/convert_deeplpf_coreml.py \
+            --source "$RUNNER_TEMP/deeplpf-source" \
+            --output LumaGrade/DeepLPFModels/DeepLPF.mlpackage
       - name: Prepare compact bundled LUTs
         run: python3 Scripts/prepare_luts.py
       - name: Build unsigned iPhone app
@@ -19,6 +32,11 @@ jobs:
           set -euxo pipefail
           APP_PATH="build/Build/Products/Release-iphoneos/LumaGrade.app"
           test -s "$APP_PATH/LumaGrade"
+          test -d "$APP_PATH/DeepLPFModels/DeepLPF.mlpackage"
+          test -s "$APP_PATH/DeepLPFModels/DeepLPF.mlpackage/Manifest.json"
+          test -s "$APP_PATH/DeepLPFModels/DeepLPF.mlpackage/Data/com.apple.CoreML/model.mlmodel"
+          DEEPLPF_SIZE=$(du -sm "$APP_PATH/DeepLPFModels/DeepLPF.mlpackage" | cut -f1)
+          echo "Bundled DeepLPF Core ML size: ${DEEPLPF_SIZE} MB"
           plutil -lint "$APP_PATH/Info.plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist")" = "AppIcon"
           find "$APP_PATH" -maxdepth 1 -type f -iname '*appicon*.png' | grep -q .

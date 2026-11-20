@@ -716,7 +716,7 @@ private struct MediaProjectThumbnail: View {
 struct EditorView: View {
     @EnvironmentObject private var library: ProjectLibrary; @Environment(\.dismiss) private var dismiss
     @State private var project: GradeProject; @State private var tab = 0; @State private var importedLUT: CubeLUT?; @State private var sourceLUT: CubeLUT?; @State private var bundledLUTs: [(String, String, URL)] = []; @State private var selectedCategory = "Cinematic"; @State private var importing = false; @State private var videoPlayer: AVPlayer?; @State private var videoDuration = 0.0; @State private var exportMessage: String?
-    @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?
+    @State private var lutLoadError: String?; @State private var sourcePreviewImage: UIImage?; @State private var deepLPFError: String?
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var showingPresets = false
     @State private var favoriteLUTNames = Set(UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteLUTs") ?? [])
@@ -832,6 +832,9 @@ struct EditorView: View {
             .alert("LUT yüklenemedi", isPresented: Binding(get: { lutLoadError != nil }, set: { if !$0 { lutLoadError = nil } })) {
                 Button("Tamam", role: .cancel) { lutLoadError = nil }
             } message: { Text(lutLoadError ?? "") }
+            .alert("DeepLPF sonucu", isPresented: Binding(get: { deepLPFError != nil }, set: { if !$0 { deepLPFError = nil } })) {
+                Button("Tamam", role: .cancel) { deepLPFError = nil }
+            } message: { Text(deepLPFError ?? "") }
         }
     }
     private func editorTab(_ title: String, symbol: String, value: Int) -> some View {
@@ -963,9 +966,32 @@ struct EditorView: View {
         case 2:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
         case 3:
-            EmptyView()
+            DeepLPFPanel(
+                sourceImage: deepLPFInputImage,
+                isVideo: isVideo,
+                onApply: applyDeepLPFResult
+            )
         default:
             EmptyView()
+        }
+    }
+    private var deepLPFInputImage: UIImage? {
+        guard !isVideo, let image = library.image(for: project) else { return nil }
+        return ImageRenderer.grade(image, settings: project.settings, lut: importedLUT, sourceLUT: sourceLUT)
+    }
+    private func applyDeepLPFResult(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.98) else {
+            deepLPFError = "DeepLPF sonucu kaydedilemedi."
+            return
+        }
+        do {
+            library.update(project)
+            project = try library.add(imageData: data, fileExtension: "jpg", source: "Regular")
+            importedLUT = nil
+            sourceLUT = nil
+            tab = 0
+        } catch {
+            deepLPFError = "DeepLPF sonucu yeni projeye eklenemedi: \(error.localizedDescription)"
         }
     }
     private func exportToPhotos() {
