@@ -57,16 +57,27 @@ jobs:
           from pathlib import Path
           path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
           source = path.read_text(encoding="utf-8")
-          needle = "f_size = str(x.shape[-1])"
-          if source.count(needle) != 2:
+
+          encoder_old = "enc_feat_dict[str(x.shape[-1])] = x.clone()"
+          generator_old = "f_size = str(x.shape[-1])"
+          if source.count(encoder_old) != 1 or source.count(generator_old) != 1:
               raise SystemExit(
-                  f"Expected exactly 2 feature-size expressions, found {source.count(needle)}"
+                  "Unexpected official CodeFormer source layout; "
+                  f"encoder expression count={source.count(encoder_old)}, "
+                  f"generator expression count={source.count(generator_old)}"
               )
-          encoder = 'f_size = {2: "512", 5: "256", 8: "128", 11: "64", 14: "32"}[i]'
-          generator = 'f_size = {9: "32", 12: "64", 15: "128", 18: "256"}[i]'
-          source = source.replace(needle, encoder, 1).replace(needle, generator, 1)
+
+          encoder_new = (
+              'enc_feat_dict[{2: "512", 5: "256", 8: "128", '
+              '11: "64", 14: "32"}[i]] = x.clone()'
+          )
+          generator_new = (
+              'f_size = {9: "32", 12: "64", 15: "128", 18: "256"}[i]'
+          )
+          source = source.replace(encoder_old, encoder_new, 1)
+          source = source.replace(generator_old, generator_new, 1)
           path.write_text(source, encoding="utf-8")
-          print("Patched encoder/generator feature-size lookups to static block-index keys.")
+          print("Patched encoder feature storage and generator fusion keys.")
           PY
 
       - name: Download official model checkpoints
