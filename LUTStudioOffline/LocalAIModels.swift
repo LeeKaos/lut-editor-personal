@@ -198,7 +198,7 @@ final class LocalAIModelStore: ObservableObject {
                 return result
             }
             if let array = output.multiArrayValue {
-                let outputImage = try image(from: array)
+                let outputImage = try ciImage(from: array)
                 let context = CIContext(options: [.cacheIntermediates: false])
                 guard let result = context.createCGImage(outputImage, from: outputImage.extent) else {
                     throw LocalAIError.invalidModelOutput
@@ -273,7 +273,7 @@ final class LocalAIModelStore: ObservableObject {
         return array
     }
 
-    private nonisolated static func image(from array: MLMultiArray) throws -> CIImage {
+    private nonisolated static func ciImage(from array: MLMultiArray) throws -> CIImage {
         let shape = array.shape.map(\.intValue)
         guard shape.count >= 3 else { throw LocalAIError.invalidModelOutput }
         let channelFirst = shape.count == 4 ? shape[1] == 3 : shape[0] == 3
