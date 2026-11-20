@@ -18,6 +18,7 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/lumagrade-engine-venv"
           "$RUNNER_TEMP/lumagrade-engine-venv/bin/python" -m pip install --disable-pip-version-check coremltools==8.3 gdown==5.2.0
           "$RUNNER_TEMP/lumagrade-engine-venv/bin/python" Scripts/prepare_engine_models.py
+          swift Scripts/validate_engine_models.swift LumaGrade/EngineModels
       - name: Build unsigned iPhone app
         run: xcodebuild -project LumaGrade.xcodeproj -scheme LumaGrade -sdk iphoneos -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
       - name: Verify iPhone app package metadata
