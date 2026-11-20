@@ -12,6 +12,7 @@ private enum EditorTab: String, CaseIterable {
     case filters = "Filters"
     case adjust = "Adjust"
     case effects = "Effects"
+    case custom = "Özel"
 }
 
 private struct LUTPreset: Identifiable, Hashable {
@@ -68,7 +69,7 @@ private enum FilmEffect: String, CaseIterable, Identifiable, Codable {
 
 private struct GradeSettings: Codable, Equatable {
     var lutURL: URL?
-    var lutIntensity: Float = 1
+    var lutIntensity: Float = 0.72
     var hue: Float = 0
     var exposure: Float = 0
     var contrast: Float = 0
@@ -86,6 +87,8 @@ private struct GradeSettings: Codable, Equatable {
     var roughness: Float = 0.35
     var size: Float = 0.55
     var smartEnhance: Bool? = nil
+    // Optional to keep older saved project and preset JSON files decodable.
+    var beautifyEnabled: Bool? = nil
 }
 
 private struct UserPreset: Codable, Identifiable {
@@ -361,6 +364,7 @@ struct EditorView: View {
                 case .filters: filtersPanel
                 case .adjust: adjustmentsPanel
                 case .effects: effectsPanel
+                case .custom: customPanel
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -572,7 +576,7 @@ struct EditorView: View {
                 Text(selectedAdjustment.rawValue).font(.system(size: 12, weight: .medium))
                 Spacer()
                 if selectedAdjustment != .curves {
-                    Text(adjustmentValue, format: .number.precision(.fractionLength(0)))
+                    Text(adjustmentValueText)
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7))
                 }
             }.padding(.horizontal, 24)
@@ -581,7 +585,7 @@ struct EditorView: View {
                     .frame(height: 150).padding(.horizontal, 20)
             } else {
                 Slider(value: sliderBinding(binding(for: selectedAdjustment)),
-                       in: Double(range(for: selectedAdjustment).lowerBound)...Double(range(for: selectedAdjustment).upperBound))
+                       in: Double(range(for: selectedAdjustment).lowerBound)...Double(range(for: selectedAdjustment).upperBound), step: 0.005)
                     .tint(.white).padding(.horizontal, 24)
             }
             Spacer(minLength: 18)
@@ -631,7 +635,7 @@ struct EditorView: View {
     private func sliderRow(title: String, value: Binding<Float>, range: ClosedRange<Float>) -> some View {
         HStack(spacing: 12) {
             Text(title).font(.system(size: 11)).frame(width: 62, alignment: .leading)
-            Slider(value: sliderBinding(value), in: Double(range.lowerBound)...Double(range.upperBound)).tint(.white)
+            Slider(value: sliderBinding(value), in: Double(range.lowerBound)...Double(range.upperBound), step: 0.005).tint(.white)
         }.foregroundStyle(.white).padding(.horizontal, 20)
     }
 
@@ -654,7 +658,15 @@ struct EditorView: View {
         }
     }
 
-    private var adjustmentValue: Float { binding(for: selectedAdjustment).wrappedValue * 100 }
+    private var adjustmentValueText: String {
+        let value = binding(for: selectedAdjustment).wrappedValue
+        switch selectedAdjustment {
+        case .exposure: return String(format: "%.2f EV", value)
+        case .hue: return String(format: "%.1f°", value * 180)
+        case .temperature: return String(format: "%.0f", value * 100)
+        default: return String(format: "%.0f", value * 100)
+        }
+    }
 
     private func binding(for adjustment: Adjustment) -> Binding<Float> {
         switch adjustment {
@@ -674,11 +686,13 @@ struct EditorView: View {
 
     private func range(for adjustment: Adjustment) -> ClosedRange<Float> {
         switch adjustment {
-        case .hue: return -1...1
+        case .hue: return -0.5...0.5
         case .exposure: return -2...2
         case .temperature: return -1...1
-        case .contrast, .highlights, .shadows: return -1...1
-        case .vibrance, .saturation, .sharpness, .vignette, .curves: return -1...1
+        case .contrast, .highlights, .shadows: return -0.5...0.5
+        case .vibrance, .saturation: return -0.5...0.5
+        case .sharpness, .vignette: return 0...1
+        case .curves: return -1...1
         }
     }
 
