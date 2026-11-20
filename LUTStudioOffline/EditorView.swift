@@ -1113,8 +1113,8 @@ struct EditorView: View {
         if settings.highlights != 0 || settings.shadows != 0,
            let filter = CIFilter(name: "CIHighlightShadowAdjust") {
             filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(1 - settings.shadows, forKey: "inputShadowAmount")
-            filter.setValue(1 - settings.highlights, forKey: "inputHighlightAmount")
+            filter.setValue(min(0.5, max(-0.5, settings.shadows)), forKey: "inputShadowAmount")
+            filter.setValue(min(1, max(0, 1 - settings.highlights)), forKey: "inputHighlightAmount")
             image = filter.outputImage ?? image
         }
         if settings.temperature != 0, let filter = CIFilter(name: "CITemperatureAndTint") {
