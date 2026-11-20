@@ -531,6 +531,9 @@ struct EditorView: View {
             compositionUpdateTask?.cancel()
             photoRenderGeneration += 1
         }
+        .task {
+            await localAIModels.loadInstalledModels()
+        }
     }
 
     private var customPanel: some View {
