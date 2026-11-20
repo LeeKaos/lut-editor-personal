@@ -207,6 +207,11 @@ struct EditorView: View {
     @State private var showExportMessage = false
     @State private var showingPhotoPicker = false
     @State private var photoAccessAlert: String?
+    @StateObject private var localAIModels = LocalAIModelStore()
+    @State private var isImportingAIModel = false
+    @State private var pendingAIKind: LocalAIModelKind = .realESRGAN
+    @State private var isRunningAI = false
+    @State private var aiStatusMessage: String?
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     private static let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -495,6 +500,31 @@ struct EditorView: View {
                 }.padding(20)
             }.preferredColorScheme(.dark)
         }
+        .fileImporter(isPresented: $isImportingAIModel, allowedContentTypes: [.item],
+                      allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let url):
+                let kind = pendingAIKind
+                Task {
+                    do {
+                        try await localAIModels.installModel(from: url, for: kind)
+                        aiStatusMessage = "\(kind.title) modeli cihaza yüklendi."
+                    } catch {
+                        aiStatusMessage = error.localizedDescription
+                    }
+                }
+            case .failure(let error):
+                aiStatusMessage = error.localizedDescription
+            }
+        }
+        .alert("Yerel AI İşlemi", isPresented: Binding(
+            get: { aiStatusMessage != nil },
+            set: { if !$0 { aiStatusMessage = nil } }
+        )) {
+            Button("Tamam", role: .cancel) { aiStatusMessage = nil }
+        } message: {
+            Text(aiStatusMessage ?? "")
+        }
         .onDisappear {
             player?.pause()
             removeTimeObserver()
@@ -530,7 +560,49 @@ struct EditorView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 13).background(accent, in: Capsule())
             }
             .buttonStyle(.plain)
-            Text("İşlem cihaz üzerinde yapılır. Fotoğraf ve videolar buluta gönderilmez.")
+            Divider().overlay(.white.opacity(0.12))
+            Text("CİHAZ İÇİ YAPAY ZEKÂ MODELLERİ")
+                .font(.system(size: 10, weight: .bold)).tracking(1.1)
+                .foregroundStyle(.white.opacity(0.55))
+            ForEach(LocalAIModelKind.allCases) { kind in
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(kind.title).font(.system(size: 12, weight: .semibold))
+                            Text(localAIModels.loadedKinds.contains(kind)
+                                 ? (localAIModels.modelNames[kind] ?? "Model hazır")
+                                 : kind.detail)
+                                .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                        }
+                        Spacer()
+                        Button(localAIModels.loadedKinds.contains(kind) ? "Modeli değiştir" : "Model ekle") {
+                            pendingAIKind = kind
+                            isImportingAIModel = true
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(accent)
+                    }
+                    Button {
+                        runLocalAI(kind)
+                    } label: {
+                        HStack {
+                            if isRunningAI { ProgressView().tint(.black) }
+                            else { Image(systemName: kind == .codeFormer ? "face.smiling" : "arrow.up.left.and.arrow.down.right") }
+                            Text(kind == .codeFormer ? "Yüz detaylarını iyileştir" : "Fotoğrafı AI ile büyüt")
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(.black)
+                        .padding(.horizontal, 13).padding(.vertical, 10)
+                        .background(accent.opacity(0.92), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!localAIModels.loadedKinds.contains(kind) || imageURL == nil || isRunningAI || localAIModels.isBusy)
+                }
+                .padding(11)
+                .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+            }
+            Text("Modeller .mlpackage, .mlmodel veya .mlmodelc olarak bu cihaza yüklenir. Görseller sunucuya gönderilmez. CodeFormer için uyumlu ve lisansı uygun Core ML dönüşümü gerekir.")
                 .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
             Spacer(minLength: 0)
         }
@@ -1254,6 +1326,33 @@ struct EditorView: View {
             }
         }
         return image.cropped(to: source.extent)
+    }
+
+    private func runLocalAI(_ kind: LocalAIModelKind) {
+        guard let imageURL, let source = UIImage(contentsOfFile: imageURL.path) else {
+            aiStatusMessage = "Önce bir fotoğraf seçmelisin."
+            return
+        }
+        isRunningAI = true
+        Task {
+            do {
+                let enhanced = try await localAIModels.enhance(source, using: kind)
+                guard let data = enhanced.jpegData(compressionQuality: 0.98) else {
+                    throw LocalAIError.invalidModelOutput
+                }
+                let savedURL = try ProjectFileStorage.keepImportedPhoto(data)
+                originalPhotoPreview = originalPhotoPreview ?? source
+                photoPreview = enhanced
+                imageURL = savedURL
+                isShowingOriginal = false
+                aiStatusMessage = kind == .codeFormer
+                    ? "CodeFormer yüz restorasyonu tamamlandı. Sonucu dışa aktarabilirsin."
+                    : "Real-ESRGAN yerel büyütme tamamlandı. Sonucu dışa aktarabilirsin."
+            } catch {
+                aiStatusMessage = error.localizedDescription
+            }
+            isRunningAI = false
+        }
     }
 
     private func exportPhoto() {
