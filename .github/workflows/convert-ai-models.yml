@@ -32,7 +32,7 @@ jobs:
       - name: Clone official CodeFormer source
         run: |
           git clone --depth 1 https://github.com/sczhou/CodeFormer.git
-          python -m pip install -e CodeFormer/basicsr --no-deps
+          python -m pip install -e CodeFormer/basicsr --no-deps --no-build-isolation
 
       - name: Download official model checkpoints
         run: |
