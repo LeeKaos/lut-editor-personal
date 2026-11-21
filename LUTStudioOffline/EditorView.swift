@@ -716,8 +716,11 @@ struct EditorView: View {
                 imageURL = savedURL
                 isShowingOriginal = false
                 let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
-                let fallback = processing.cloudFallbackMessage.map { " ($0)" } ?? ""
-                aiStatusMessage = "(commands.map(\.title).joined(separator: " + ")) tamamlandı • (route).(fallback) Sonucu dışa aktarabilirsin."
+                let fallback = processing.cloudFallbackMessage ?? ""
+                let commandNames = commands.map(\.title).joined(separator: " + ")
+                aiStatusMessage = commandNames + " tamamlandı • " + route
+                    + (fallback.isEmpty ? "" : " (" + fallback + ")")
+                    + " Sonucu dışa aktarabilirsin."
             } catch {
                 aiStatusMessage = error.localizedDescription
             }
