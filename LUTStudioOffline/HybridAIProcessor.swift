@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Vision
 
 enum CloudAIError: LocalizedError {
     case endpointNotConfigured
@@ -21,6 +22,62 @@ enum CloudAIError: LocalizedError {
     }
 }
 
+struct SmartPhotoAnalysis: Encodable {
+    let imageWidth: Int
+    let imageHeight: Int
+    let faceCount: Int
+    let portraitOrientation: Bool
+    let sceneLabels: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case imageWidth = "image_width"
+        case imageHeight = "image_height"
+        case faceCount = "face_count"
+        case portraitOrientation = "portrait_orientation"
+        case sceneLabels = "scene_labels"
+    }
+}
+
+enum SmartImageAnalyzer {
+    static func analyze(_ image: UIImage) -> SmartPhotoAnalysis {
+        let fallbackWidth = Int(image.size.width * image.scale)
+        let fallbackHeight = Int(image.size.height * image.scale)
+        let cgImage = image.cgImage ?? UIGraphicsImageRenderer(size: image.size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }.cgImage
+
+        guard let cgImage else {
+            return SmartPhotoAnalysis(
+                imageWidth: fallbackWidth,
+                imageHeight: fallbackHeight,
+                faceCount: 0,
+                portraitOrientation: fallbackHeight >= fallbackWidth,
+                sceneLabels: []
+            )
+        }
+
+        let faceRequest = VNDetectFaceRectanglesRequest()
+        let sceneRequest = VNClassifyImageRequest()
+        do {
+            try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([faceRequest, sceneRequest])
+        } catch {
+            // Analysis is advisory; the image can still be processed if Vision classification fails.
+        }
+        let labels = (sceneRequest.results ?? [])
+            .prefix(5)
+            .filter { $0.confidence >= 0.15 }
+            .map(\.identifier)
+
+        return SmartPhotoAnalysis(
+            imageWidth: cgImage.width,
+            imageHeight: cgImage.height,
+            faceCount: faceRequest.results?.count ?? 0,
+            portraitOrientation: cgImage.height >= cgImage.width,
+            sceneLabels: labels
+        )
+    }
+}
+
 /// App-facing contract for a private image-processing backend.
 /// Provider API keys must remain on that backend, never in the iOS app.
 struct CloudAIClient {
@@ -29,12 +86,14 @@ struct CloudAIClient {
         let mimeType: String
         let commands: [String]
         let outputFormat: String
+        let analysis: SmartPhotoAnalysis
 
         enum CodingKeys: String, CodingKey {
             case imageBase64 = "image_base64"
             case mimeType = "mime_type"
             case commands
             case outputFormat = "output_format"
+            case analysis
         }
     }
 
@@ -63,7 +122,8 @@ struct CloudAIClient {
             imageBase64: jpeg.base64EncodedString(),
             mimeType: "image/jpeg",
             commands: commands.map(\.rawValue),
-            outputFormat: "jpeg"
+            outputFormat: "jpeg",
+            analysis: SmartImageAnalyzer.analyze(image)
         )
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
