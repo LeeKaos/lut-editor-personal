@@ -122,7 +122,7 @@ enum AICommandEngine {
         case .hdReal:
             filter("CISharpenLuminance", ["inputSharpness": 0.45, "inputRadius": 1.0])
         case .colorFix:
-            let auto = output.autoAdjustmentFilters(options: [.enhance: true, . redEye: false])
+            let auto = output.autoAdjustmentFilters(options: [.enhance: true, .redEye: false])
             for effect in auto {
                 effect.setValue(output, forKey: kCIInputImageKey)
                 output = effect.outputImage?.cropped(to: extent) ?? output
