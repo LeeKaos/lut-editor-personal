@@ -576,7 +576,8 @@ struct EditorView: View {
                 aiCommandSection("TEK DOKUNUŞLA EFEKTLER",
                                 subtitle: "Core Image • Fotoğrafa anında uygulanır",
                                 commands: ["/GLOWUP", "/BGSTUDIO", "/SOFTLIGHT", "/PROSHOT",
-                                           "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX"])
+                                           "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX",
+                                           "/LONGEXPOSURE", "/MOTIONBLUR", "/GOLDENHOUR"])
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("CORE ML MODELLERİ").font(.system(size: 10, weight: .bold)).tracking(1)
@@ -584,14 +585,9 @@ struct EditorView: View {
                         .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
                     aiModelRow(title: "CodeFormer • Yüz iyileştirme", command: "/FACEFIX",
                                kind: .codeFormer, symbol: "face.smiling")
-                    aiModelRow(title: "Real-ESRGAN • 4× büyütme", command: "/UPSCALE4X",
+                    aiModelRow(title: "Real-ESRGAN • HD gerçek çözünürlük artırma", command: "/HDREAL",
                                kind: .realESRGAN, symbol: "arrow.up.left.and.arrow.down.right")
                 }
-
-                aiCommandSection("ÜRETKEN DÜZENLEME",
-                                subtitle: "Gerekli özel model ve görev hattı henüz entegre edilmedi",
-                                commands: ["/GHIBLI", "/OUTFIT", "/REMOVEOBJECT", "/BGCINEMATIC",
-                                           "/MISTY-HILLS", "/STORM-COAST", "/GOLDEN-COAST"])
 
                 if isRunningAI {
                     HStack(spacing: 8) {
@@ -605,7 +601,7 @@ struct EditorView: View {
                         .foregroundStyle(accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("Efekt butonları seçili fotoğrafı işler ve sonucu önizlemede gösterir. Üretken düzenleme komutları, uygun model ve maskeleme/üretim hattı eklenene kadar çalıştırılamaz; uygulama bunu açıkça bildirir.")
+                Text("Efektler cihaz üzerinde çalışır. FACEFIX ve HDREAL, ilgili Core ML modellerini kullanır; diğer efektler Core Image ile anında uygulanır.")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
             }
             .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
@@ -673,10 +669,6 @@ struct EditorView: View {
             aiStatusMessage = "Komut tanınmadı. Örnek: /GLOWUP veya /GLOWUP /SOFTLIGHT"
             return
         }
-        if let unsupported = commands.first(where: { $0.requiresGenerativeModel }) {
-            aiStatusMessage = "\(unsupported.title) için uyumlu üretken Core ML modeli henüz yüklenmedi."
-            return
-        }
         guard let currentURL = imageURL,
               let source = UIImage(contentsOfFile: currentURL.path) else {
             aiStatusMessage = "Önce galeriden bir fotoğraf seçmelisin."
@@ -691,7 +683,7 @@ struct EditorView: View {
                     switch command {
                     case .faceRestore:
                         result = try await localAIModels.enhance(result, using: .codeFormer)
-                    case .upscale:
+                    case .hdReal:
                         result = try await localAIModels.enhance(result, using: .realESRGAN)
                     default:
                         result = try AICommandEngine.apply(command, to: result)
