@@ -595,7 +595,7 @@ struct EditorView: View {
                         Text("Efekt uygulanıyor…").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
                     }
                 }
-                if !aiStatusMessage.isEmpty {
+                if let aiStatusMessage, !aiStatusMessage.isEmpty {
                     Text(aiStatusMessage)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(accent)
