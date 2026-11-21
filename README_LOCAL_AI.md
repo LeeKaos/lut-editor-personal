@@ -1,56 +1,41 @@
-# Local AI models (Core ML)
+# Local AI effects and Core ML models
 
-The **Özel** panel can load Core ML models directly on the iPhone. The model files are copied into the app's Application Support directory and inference runs with Apple's Core ML runtime (`computeUnits = .all`). Photos are not uploaded.
+LUT Studio photo effects run locally on the iPhone. Photos are not uploaded.
 
-## Install a model
+## Active slash commands
 
-1. Open a photo in LUT Studio and choose **Özel**.
-2. Tap **Model ekle** beside CodeFormer or Real-ESRGAN.
+- `/GLOWUP`, `/BGSTUDIO`, `/SOFTLIGHT`, `/PROSHOT`
+- `/OLD2NEW`, `/HDREAL`, `/COLORFIX`, `/NIGHTFIX`
+- `/LONGEXPOSURE`, `/MOTIONBLUR`, `/GOLDENHOUR`
+- `/FACEFIX`
+
+The first, second, third, fourth, fifth, seventh, eighth, ninth, tenth, and eleventh commands are native Core Image effects and do not need separate neural-network model files. `/HDREAL` uses Real-ESRGAN x4plus for actual super-resolution. `/FACEFIX` uses CodeFormer for face restoration.
+
+## Install the two Core ML models
+
+1. Open a photo and choose **Yapay Zekâ**.
+2. Tap **Model ekle** beside Face Fix or HD Real.
 3. Select a compatible `.mlpackage`, `.mlmodel`, or compiled `.mlmodelc` from Files.
-4. After the model is loaded, use the corresponding local processing button.
+4. Once installed, tap the corresponding effect button.
 
-The app does not download model weights. Keep model files in the Files app or another local storage location and import them when needed.
+The app copies models into Application Support and runs inference using Core ML on-device. It does not download weights automatically.
 
-## Model interface requirements
+### Real-ESRGAN x4plus
 
-The runtime supports Core ML models with an image input or an RGB `MLMultiArray` input (NCHW or NHWC, 3 channels), and an image or RGB `MLMultiArray` output. Optional scalar inputs are initialized conservatively: a parameter named `w` or containing `fidelity` receives 0.7; other numeric scalar inputs receive zero.
-
-### Real-ESRGAN
-
-Use a Core ML conversion of the general-photo RealESRGAN_x4plus or x2plus model. The runtime reads the model's fixed input tensor dimensions and processes the source photo in overlapping tiles, then assembles the output at the model's scale. This avoids stretching the entire photo into a square model input.
-
-The upstream Real-ESRGAN project is BSD-3-Clause. Preserve its license and attribution when redistributing model weights or converted packages.
+Use the general-photo RealESRGAN_x4plus conversion. The runtime processes large images in overlapping tiles. Upstream Real-ESRGAN is BSD-3-Clause; retain attribution when redistributing weights or converted packages.
 
 ### CodeFormer
 
-CodeFormer is used only for face restoration. Vision detects faces on-device, expands each face to a square crop, runs the Core ML model on the crop, and blends the restored result into the original photo with a soft mask. No face is synthesized when no face is detected.
+Vision detects faces on-device, crops each face, runs Core ML inference, and blends the restored crop into the original photo. The official CodeFormer project uses the NTU S-Lab License 1.0. Review the exact model conversion's license and terms. The repository does not bundle its weights.
 
-CodeFormer Core ML conversions are not interchangeable: use a conversion whose input/output tensor names and shapes match the interface above. The official CodeFormer project is distributed under the NTU S-Lab License 1.0. Review that license and the terms for the exact converted weights before copying or distributing a model. This repository intentionally does not bundle CodeFormer weights.
+## Conversion workflow
 
-## Important
+The GitHub Actions workflow `.github/workflows/convert-ai-models.yml` creates Core ML packages for CodeFormer and Real-ESRGAN and uploads them as an Actions artifact. Run it from the feature branch, then download `iOS-CoreML-models` and import the two packages through the app.
 
-- This integration is for still-photo processing. Video-frame AI processing is not enabled; existing video grading/export remains on-device through AVFoundation and Core Image.
-- Core ML model interfaces vary by converter. A model that uses unsupported feature types or custom multi-input preprocessing will be rejected with an explanatory error rather than silently producing a misleading result.
-- Model quality, memory use, and speed depend on the exact conversion and iPhone hardware. Test with copies of original photos first.
+## Technical notes
 
-## Yapay Zekâ sekmesi ve slash komutları
+- These are still-photo effects. AI processing on video frames is not included.
+- Core Image effects are deterministic local filters, not generative AI models.
+- Model speed and memory use depend on the iPhone and the exact converted package.
+- The app intentionally does not include Ghibli style transfer, object removal, outfit replacement, or background removal.
 
-The editor includes a separate **Yapay Zekâ** tab and a local slash-command router. Commands can be entered individually or chained, for example:
-
-`/GLOWUP /BGSTUDIO /SOFTLIGHT`
-
-Native Core Image command implementations currently include:
-
-- `/GLOWUP`, `/BGSTUDIO`, `/SOFTLIGHT`, `/PROSHOT`
-- `/OLD2NEW` (basic tonal/sharpness cleanup; not neural photo restoration)
-- `/HDREAL` (sharpening only; not true super-resolution)
-- `/COLORFIX`, `/NIGHTFIX`
-
-Existing local model commands:
-
-- `/FACEFIX` or `/CODEFORMER` — requires the installed CodeFormer model.
-- `/UPSCALE4X` or `/HDUP` — requires the installed Real-ESRGAN model.
-
-The command router also reserves names for `/GHIBLI`, `/OUTFIT`, `/REMOVEOBJECT`, `/BGCINEMATIC`, `/MISTY-HILLS`, `/STORM-COAST`, and `/GOLDEN-COAST`. These require task-specific generative models and preprocessing (for example, a style-transfer model, segmentation plus inpainting, or virtual try-on). The app deliberately reports that a model is required instead of pretending a conventional color filter performs those edits. They are not active generative features yet.
-
-All currently implemented Core Image effects run locally. The command palette does not upload photos.
