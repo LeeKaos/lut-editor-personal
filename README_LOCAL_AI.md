@@ -4,9 +4,10 @@ LUT Studio, hızlı ve güvenilir işlemler için iPhone üzerinde Core Image ve
 
 ## İşleme yönlendirmesi
 
-1. **Bulut AI (isteğe bağlı):** Çok adımlı fotoğraf düzenleme komutları tek istekle sunucuya gönderilir. Sunucu, seçilen bulut görüntü modelini çalıştırır ve JPEG çıktısını döndürür.
-2. **Yerel Core ML:** FACEFIX için CodeFormer, HDREAL için Real-ESRGAN x4plus kullanılır.
-3. **Yerel efekt motoru:** GLOWUP, BGSTUDIO, SOFTLIGHT, PROSHOT, OLD2NEW, COLORFIX, NIGHTFIX, LONGEXPOSURE, MOTIONBLUR ve GOLDENHOUR mevcut Core Image zincirleriyle internet olmadan da çalışır.
+1. **Akıllı görüntü analizi:** Vision; fotoğrafın boyutlarını, portre/yatay yönünü, yüz sayısını ve öne çıkan sahne sınıflandırmalarını çıkarır. Bu bilgiler bulut isteğine bağlam olarak eklenir.
+2. **Bulut AI (isteğe bağlı):** Çok adımlı fotoğraf düzenleme komutları ve analiz bilgisi tek istekle sunucuya gönderilir. Sunucu, seçilen bulut görüntü modelini çalıştırır ve JPEG çıktısını döndürür.
+3. **Yerel Core ML:** FACEFIX için CodeFormer, HDREAL için Real-ESRGAN x4plus kullanılır.
+4. **Yerel profesyonel efekt motoru:** GLOWUP, BGSTUDIO, SOFTLIGHT, PROSHOT, OLD2NEW, COLORFIX, NIGHTFIX, LONGEXPOSURE, MOTIONBLUR ve GOLDENHOUR mevcut Core Image zincirleriyle internet olmadan da çalışır.
 
 ## Bulut sunucusu sözleşmesi
 
@@ -19,7 +20,14 @@ AI stüdyosunda **Bulut AI ile yüksek kalite** seçeneğini açın ve HTTPS end
   "image_base64": "<base64 JPEG>",
   "mime_type": "image/jpeg",
   "commands": ["glowUp", "proShot"],
-  "output_format": "jpeg"
+  "output_format": "jpeg",
+  "analysis": {
+    "image_width": 3024,
+    "image_height": 4032,
+    "face_count": 1,
+    "portrait_orientation": true,
+    "scene_labels": ["person", "outdoor"]
+  }
 }
 ~~~
 
