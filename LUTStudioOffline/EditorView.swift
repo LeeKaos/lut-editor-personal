@@ -13,6 +13,7 @@ private enum EditorTab: String, CaseIterable {
     case adjust = "Adjust"
     case effects = "Effects"
     case custom = "Özel"
+    case ai = "Yapay Zekâ"
 }
 
 private struct LUTPreset: Identifiable, Hashable {
@@ -212,6 +213,7 @@ struct EditorView: View {
     @State private var pendingAIKind: LocalAIModelKind = .realESRGAN
     @State private var isRunningAI = false
     @State private var aiStatusMessage: String?
+    @State private var slashCommandText = "/GLOWUP"
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     nonisolated(unsafe) private static let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -429,6 +431,7 @@ struct EditorView: View {
                 case .adjust: adjustmentsPanel
                 case .effects: effectsPanel
                 case .custom: customPanel
+                case .ai: aiPanel
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -538,6 +541,109 @@ struct EditorView: View {
                         .background(.black.opacity(0.6), in: Circle())
                 }.padding(20)
             }.preferredColorScheme(.dark)
+        }
+    }
+
+
+    private var aiPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 9) {
+                Image(systemName: "wand.and.stars").foregroundStyle(accent).font(.system(size: 22))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Yapay Zekâ Stüdyosu").font(.system(size: 16, weight: .semibold))
+                    Text("Komut yaz veya hazır efekt seç").font(.system(size: 11)).foregroundStyle(.white.opacity(0.58))
+                }
+                Spacer()
+                Text("CİHAZ İÇİ").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
+            }
+            HStack(spacing: 8) {
+                TextField("/GLOWUP", text: $slashCommandText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .padding(12)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                Button {
+                    runSlashCommand(slashCommandText)
+                } label: {
+                    Image(systemName: "play.fill").foregroundStyle(.black)
+                        .frame(width: 44, height: 44)
+                        .background(accent, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .disabled(imageURL == nil || isRunningAI)
+            }
+            Text("HIZLI KOMUTLAR").font(.system(size: 9, weight: .bold)).tracking(1)
+                .foregroundStyle(.white.opacity(0.55))
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(["/GLOWUP", "/BGSTUDIO", "/SOFTLIGHT", "/PROSHOT",
+                         "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX",
+                         "/GHIBLI", "/OUTFIT"], id: \.self) { command in
+                    Button {
+                        slashCommandText = command
+                        runSlashCommand(command)
+                    } label: {
+                        HStack {
+                            Text(command).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.system(size: 9))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 11)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(imageURL == nil || isRunningAI)
+                }
+            }
+            if isRunningAI {
+                HStack(spacing: 8) {
+                    ProgressView().tint(accent)
+                    Text("Efekt uygulanıyor…").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            Text("GLOWUP, BGSTUDIO, SOFTLIGHT, PROSHOT, OLD2NEW, HDREAL, COLORFIX ve NIGHTFIX temel cihaz içi görüntü işlemleridir. GHIBLI, OUTFIT, nesne silme ve üretken arka plan değişimi için ayrıca uyumlu Core ML üretken model gerekir.")
+                .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20).padding(.top, 8)
+        .foregroundStyle(.white)
+    }
+
+    private func runSlashCommand(_ rawCommand: String) {
+        guard let command = AICommandEngine.command(from: rawCommand) else {
+            aiStatusMessage = "Komut tanınmadı. Örnek: /GLOWUP veya /SOFTLIGHT"
+            return
+        }
+        if command == .faceRestore {
+            runLocalAI(.codeFormer)
+            return
+        }
+        if command == .upscale {
+            runLocalAI(.realESRGAN)
+            return
+        }
+        guard let currentURL = imageURL,
+              let source = UIImage(contentsOfFile: currentURL.path) else {
+            aiStatusMessage = "Önce galeriden bir fotoğraf seçmelisin."
+            return
+        }
+        isRunningAI = true
+        Task {
+            defer { isRunningAI = false }
+            do {
+                let result = try AICommandEngine.apply(command, to: source)
+                guard let data = result.jpegData(compressionQuality: 0.98) else {
+                    throw LocalAIError.invalidModelOutput
+                }
+                let savedURL = try ProjectFileStorage.keepImportedPhoto(data)
+                originalPhotoPreview = originalPhotoPreview ?? source
+                photoPreview = result
+                imageURL = savedURL
+                isShowingOriginal = false
+                aiStatusMessage = "\(command.title) efekti uygulandı. Sonucu dışa aktarabilirsin."
+            } catch {
+                aiStatusMessage = error.localizedDescription
+            }
         }
     }
 
