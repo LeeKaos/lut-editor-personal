@@ -6,9 +6,8 @@ import UIKit
 enum AICommand: String, CaseIterable {
     case glowUp, beStudio, softLight, proShot
     case old2New, hdReal, colorFix, nightFix
-    case ghibli, outfit, removeObject, bgCinematic
-    case mistyHills, stormCoast, goldenCoast
-    case faceRestore, upscale
+    case longExposure, motionBlur, goldenHour
+    case faceRestore
 
     var title: String {
         switch self {
@@ -20,26 +19,13 @@ enum AICommand: String, CaseIterable {
         case .hdReal: return "HD Real"
         case .colorFix: return "Color Fix"
         case .nightFix: return "Night Fix"
-        case .ghibli: return "Ghibli"
-        case .outfit: return "Outfit"
-        case .removeObject: return "Nesne Silme"
-        case .bgCinematic: return "BG Cinematic"
-        case .mistyHills: return "Misty Hills"
-        case .stormCoast: return "Storm Coast"
-        case .goldenCoast: return "Golden Coast"
-        case .faceRestore: return "Yüz Restorasyonu"
-        case .upscale: return "4× Büyütme"
+        case .longExposure: return "Long Exposure"
+        case .motionBlur: return "Motion Blur"
+        case .goldenHour: return "Golden Hour"
+        case .faceRestore: return "Face Fix"
         }
     }
 
-    var requiresGenerativeModel: Bool {
-        switch self {
-        case .ghibli, .outfit, .removeObject, .bgCinematic, .mistyHills, .stormCoast, .goldenCoast:
-            return true
-        default:
-            return false
-        }
-    }
 }
 
 enum AICommandError: LocalizedError {
@@ -63,12 +49,10 @@ enum AICommandEngine {
         "SOFTLIGHT": .softLight, "SOFT-LIGHT": .softLight,
         "PROSHOT": .proShot, "PRO-SHOT": .proShot,
         "OLD2NEW": .old2New, "HDREAL": .hdReal, "COLORFIX": .colorFix,
-        "NIGHTFIX": .nightFix, "GHIBLI": .ghibli, "OUTFIT": .outfit,
-        "REMOVEOBJECT": .removeObject, "OBJECT-REMOVE": .removeObject,
-        "BGCINEMATIC": .bgCinematic, "MISTY-HILLS": .mistyHills,
-        "STORM-COAST": .stormCoast, "GOLDEN-COAST": .goldenCoast,
-        "FACEFIX": .faceRestore, "CODEFORMER": .faceRestore,
-        "UPSCALE4X": .upscale, "HDUP": .upscale
+        "NIGHTFIX": .nightFix, "LONGEXPOSURE": .longExposure,
+        "LONG-EXPOSURE": .longExposure, "MOTIONBLUR": .motionBlur,
+        "MOTION-BLUR": .motionBlur, "GOLDENHOUR": .goldenHour,
+        "GOLDEN-HOUR": .goldenHour, "FACEFIX": .faceRestore
     ]
 
     static func commands(from raw: String) -> [AICommand] {
@@ -80,9 +64,6 @@ enum AICommandEngine {
     }
 
     static func apply(_ command: AICommand, to image: UIImage) throws -> UIImage {
-        guard !command.requiresGenerativeModel else {
-            throw AICommandError.modelRequired(command.title)
-        }
         guard let normalized = normalizedCGImage(image) else {
             throw AICommandError.unsupportedInput
         }
@@ -129,6 +110,19 @@ enum AICommandEngine {
             filter("CIExposureAdjust", ["inputEV": 0.55])
             filter("CIHighlightShadowAdjust", ["inputShadowAmount": 0.72, "inputHighlightAmount": 0.8])
             filter("CIColorControls", [kCIInputSaturationKey: 1.08, kCIInputContrastKey: 1.04])
+        case .longExposure:
+            filter("CIMotionBlur", ["inputRadius": 12.0, "inputAngle": 0.0])
+            filter("CIExposureAdjust", ["inputEV": 0.12])
+            filter("CIHighlightShadowAdjust", ["inputShadowAmount": 0.2, "inputHighlightAmount": 0.94])
+        case .motionBlur:
+            filter("CIMotionBlur", ["inputRadius": 22.0, "inputAngle": 0.0])
+        case .goldenHour:
+            filter("CITemperatureAndTint", ["inputNeutral": CIVector(x: 6500, y: 0), "inputTargetNeutral": CIVector(x: 4800, y: 12)])
+            filter("CIExposureAdjust", ["inputEV": 0.18])
+            filter("CIBloom", ["inputRadius": 18.0, "inputIntensity": 0.16])
+            filter("CIColorControls", [kCIInputSaturationKey: 1.08, kCIInputContrastKey: 1.03])
+        case .faceRestore: 
+            throw AICommandError.modelRequired(command.title)
         default:
             throw AICommandError.modelRequired(command.title)
         }
