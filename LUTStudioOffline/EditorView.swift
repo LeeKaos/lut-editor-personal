@@ -610,16 +610,13 @@ struct EditorView: View {
     }
 
     private func runSlashCommand(_ rawCommand: String) {
-        guard let command = AICommandEngine.command(from: rawCommand) else {
-            aiStatusMessage = "Komut tanınmadı. Örnek: /GLOWUP veya /SOFTLIGHT"
+        let commands = AICommandEngine.commands(from: rawCommand)
+        guard !commands.isEmpty else {
+            aiStatusMessage = "Komut tanınmadı. Örnek: /GLOWUP veya /GLOWUP /SOFTLIGHT"
             return
         }
-        if command == .faceRestore {
-            runLocalAI(.codeFormer)
-            return
-        }
-        if command == .upscale {
-            runLocalAI(.realESRGAN)
+        if let unsupported = commands.first(where: { $0.requiresGenerativeModel }) {
+            aiStatusMessage = "\(unsupported.title) için uyumlu üretken Core ML modeli henüz yüklenmedi."
             return
         }
         guard let currentURL = imageURL,
@@ -631,7 +628,17 @@ struct EditorView: View {
         Task {
             defer { isRunningAI = false }
             do {
-                let result = try AICommandEngine.apply(command, to: source)
+                var result = source
+                for command in commands {
+                    switch command {
+                    case .faceRestore:
+                        result = try await localAIModels.enhance(result, using: .codeFormer)
+                    case .upscale:
+                        result = try await localAIModels.enhance(result, using: .realESRGAN)
+                    default:
+                        result = try AICommandEngine.apply(command, to: result)
+                    }
+                }
                 guard let data = result.jpegData(compressionQuality: 0.98) else {
                     throw LocalAIError.invalidModelOutput
                 }
@@ -640,7 +647,7 @@ struct EditorView: View {
                 photoPreview = result
                 imageURL = savedURL
                 isShowingOriginal = false
-                aiStatusMessage = "\(command.title) efekti uygulandı. Sonucu dışa aktarabilirsin."
+                aiStatusMessage = "\(commands.map(\.title).joined(separator: " + ")) tamamlandı. Sonucu dışa aktarabilirsin."
             } catch {
                 aiStatusMessage = error.localizedDescription
             }
