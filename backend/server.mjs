@@ -1,5 +1,6 @@
 import http from "node:http";
 import { Buffer } from "node:buffer";
+import { timingSafeEqual } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 8080);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -77,9 +78,11 @@ function makePrompt(commands, analysis) {
 
 async function handleProcess(req, res) {
   if (!OPENAI_API_KEY) return send(res, 503, { error: "Sunucuda OPENAI_API_KEY ayarlanmamış." });
-  if (APP_ACCESS_TOKEN && req.headers["x-app-token"] !== APP_ACCESS_TOKEN) {
-    return send(res, 401, { error: "Uygulama erişim anahtarı geçersiz." });
-  }
+  if (!APP_ACCESS_TOKEN) return send(res, 503, { error: "Sunucuda APP_ACCESS_TOKEN ayarlanmamış." });
+  const providedToken = Buffer.from(String(req.headers["x-app-token"] || ""));
+  const expectedToken = Buffer.from(APP_ACCESS_TOKEN);
+  const tokenMatches = providedToken.length === expectedToken.length && timingSafeEqual(providedToken, expectedToken);
+  if (!tokenMatches) return send(res, 401, { error: "Uygulama erişim anahtarı geçersiz." });
   if (!rateLimit(req)) return send(res, 429, { error: "Çok fazla istek gönderildi. Bir dakika sonra tekrar deneyin." });
 
   let payload;
