@@ -34,7 +34,7 @@ The model choice is server-side. The app never receives the OpenAI API key.
 
 ## Security and privacy
 
-- Set both environment secrets before enabling public use. `APP_ACCESS_TOKEN` is checked in constant time? No: the current simple comparison is intended for a single-user private deployment, not a public multi-user service.
+- Both environment secrets are mandatory. The app token is compared using Node's timing-safe comparison; the service is still intended for a single-user private deployment, not a public multi-user service.
 - The server enforces an 18 MB decoded-image limit, a basic per-IP request limit, HTTPS at the hosting layer, and a 180-second upstream timeout.
 - Do not log request bodies or image payloads. Configure host logs and retention appropriately.
 - OpenAI processes the photo to fulfill the edit request. Review the applicable OpenAI API data controls and privacy terms before uploading personal images.
