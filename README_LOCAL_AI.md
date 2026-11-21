@@ -59,3 +59,9 @@ Hata yanıtı tercihen {"error":"Açıklayıcı hata"} biçiminde ve uygun HTTP 
 ## Kapsam
 
 Kişisel kullanım sürümünde Ghibli stil aktarımı, nesne silme, kıyafet değiştirme ve arka plan silme bulunmaz. AI video kare işleme henüz dahil değildir. LONGEXPOSURE tek fotoğraf üzerinde stilize bir efekttir; çoklu kareden gerçek uzun pozlama birleştirmesi değildir.
+
+## OpenAI bulut sunucusu
+
+OpenAI görsel düzenleme sunucusu `backend/` klasörüne eklendi. Render dağıtımı için kökteki `render.yaml` kullanılabilir. Ayrıntılı kurulum adımları `backend/README.md` içindedir. Sunucu `OPENAI_API_KEY` ve `APP_ACCESS_TOKEN` değerlerini yalnızca hosting ortam değişkenlerinden okur. iOS uygulamasındaki uygulama erişim anahtarı Keychain'de saklanır; OpenAI anahtarı uygulamaya gönderilmez.
+
+Model yönlendirmesi: günlük hızlı işlemler için GPT Image 2.6 Flare; yüz/ayrıntı ve restorasyon ağırlıklı işlemler için GPT Image 2.6 Sunburst. Gerçek API maliyeti ve yanıt süresi seçilen model, görsel boyutu ve kaliteye göre değişir.
