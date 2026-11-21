@@ -1,41 +1,53 @@
-# Local AI effects and Core ML models
+# Hibrit AI fotoğraf işleme
 
-LUT Studio photo effects run locally on the iPhone. Photos are not uploaded.
+LUT Studio, hızlı ve güvenilir işlemler için iPhone üzerinde Core Image ve Core ML kullanır. Kullanıcı bulut işlemeyi açıkça etkinleştirip bir HTTPS sunucu adresi tanımlarsa, komut ve fotoğraf hibrit AI API'sine gönderilir. Bulut isteği başarısız olursa desteklenen yerel işlem zinciri denenir.
 
-## Active slash commands
+## İşleme yönlendirmesi
 
-- `/GLOWUP`, `/BGSTUDIO`, `/SOFTLIGHT`, `/PROSHOT`
-- `/OLD2NEW`, `/HDREAL`, `/COLORFIX`, `/NIGHTFIX`
-- `/LONGEXPOSURE`, `/MOTIONBLUR`, `/GOLDENHOUR`
-- `/FACEFIX`
+1. **Bulut AI (isteğe bağlı):** Çok adımlı fotoğraf düzenleme komutları tek istekle sunucuya gönderilir. Sunucu, seçilen bulut görüntü modelini çalıştırır ve JPEG çıktısını döndürür.
+2. **Yerel Core ML:** FACEFIX için CodeFormer, HDREAL için Real-ESRGAN x4plus kullanılır.
+3. **Yerel efekt motoru:** GLOWUP, BGSTUDIO, SOFTLIGHT, PROSHOT, OLD2NEW, COLORFIX, NIGHTFIX, LONGEXPOSURE, MOTIONBLUR ve GOLDENHOUR mevcut Core Image zincirleriyle internet olmadan da çalışır.
 
-The first, second, third, fourth, fifth, seventh, eighth, ninth, tenth, and eleventh commands are native Core Image effects and do not need separate neural-network model files. `/HDREAL` uses Real-ESRGAN x4plus for actual super-resolution. `/FACEFIX` uses CodeFormer for face restoration.
+## Bulut sunucusu sözleşmesi
 
-## Install the two Core ML models
+iOS uygulamasına sağlayıcı API anahtarı gömülmez. OpenAI veya başka bir model sağlayıcısının anahtarı yalnızca sizin kontrol ettiğiniz backend ortam değişkenlerinde tutulmalıdır.
 
-1. Open a photo and choose **Yapay Zekâ**.
-2. Tap **Model ekle** beside Face Fix or HD Real.
-3. Select a compatible `.mlpackage`, `.mlmodel`, or compiled `.mlmodelc` from Files.
-4. Once installed, tap the corresponding effect button.
+AI stüdyosunda **Bulut AI ile yüksek kalite** seçeneğini açın ve HTTPS endpoint adresini girin. Endpoint şu JSON isteğini kabul etmelidir:
 
-The app copies models into Application Support and runs inference using Core ML on-device. It does not download weights automatically.
+~~~json
+{
+  "image_base64": "<base64 JPEG>",
+  "mime_type": "image/jpeg",
+  "commands": ["glowUp", "proShot"],
+  "output_format": "jpeg"
+}
+~~~
 
-### Real-ESRGAN x4plus
+Başarılı yanıt:
 
-Use the general-photo RealESRGAN_x4plus conversion. The runtime processes large images in overlapping tiles. Upstream Real-ESRGAN is BSD-3-Clause; retain attribution when redistributing weights or converted packages.
+~~~json
+{
+  "image_base64": "<base64 processed JPEG>"
+}
+~~~
 
-### CodeFormer
+Hata yanıtı tercihen {"error":"Açıklayıcı hata"} biçiminde ve uygun HTTP hata koduyla dönmelidir. Sunucu; dosya boyutu sınırı, istek kimlik doğrulaması, hız sınırlama, geçici dosyaların silinmesi ve sağlayıcı anahtarlarının gizliliğinden sorumludur. Uygulama yalnızca HTTPS endpoint kabul eder.
 
-Vision detects faces on-device, crops each face, runs Core ML inference, and blends the restored crop into the original photo. The official CodeFormer project uses the NTU S-Lab License 1.0. Review the exact model conversion's license and terms. The repository does not bundle its weights.
+## Gizlilik ve kontrol
 
-## Conversion workflow
+- Bulut yüklemesi varsayılan olarak kapalıdır.
+- Kullanıcı bulut seçeneğini açtığında seçilen fotoğraf işlenmek üzere yapılandırılan sunucuya gönderilir.
+- Bulut kapalıysa fotoğraf cihazdan çıkmaz.
+- Sağlayıcı anahtarları uygulama içine veya Git deposuna eklenmez.
+- Bulut erişilemezse uygulama desteklenen yerel işlem hattına döner.
+- Bulut sunucu adresi ve izin tercihi cihazdaki kullanıcı ayarlarında saklanır.
 
-The GitHub Actions workflow `.github/workflows/convert-ai-models.yml` creates Core ML packages for CodeFormer and Real-ESRGAN and uploads them as an Actions artifact. Run it from the feature branch, then download `iOS-CoreML-models` and import the two packages through the app.
+## Yerel modeller
 
-## Technical notes
+- **CodeFormer:** Vision yüz algılama, yüz kırpma, Core ML çıkarımı ve yumuşak maske ile harmanlama. Resmî CodeFormer projesinin lisans koşullarını ve kullanılan ağırlıkların lisansını kontrol edin.
+- **Real-ESRGAN x4plus:** Büyük görselleri örtüşen parçalara ayırarak x4 büyütme. Üst proje BSD-3-Clause lisanslıdır; dağıtımda atıf gerekliliklerini koruyun.
+- Model paketleri depoya gömülmez; GitHub Actions dönüşüm iş akışı artifact üretir.
 
-- These are still-photo effects. AI processing on video frames is not included.
-- Core Image effects are deterministic local filters, not generative AI models.
-- Model speed and memory use depend on the iPhone and the exact converted package.
-- The app intentionally does not include Ghibli style transfer, object removal, outfit replacement, or background removal.
+## Kapsam
 
+Kişisel kullanım sürümünde Ghibli stil aktarımı, nesne silme, kıyafet değiştirme ve arka plan silme bulunmaz. AI video kare işleme henüz dahil değildir. LONGEXPOSURE tek fotoğraf üzerinde stilize bir efekttir; çoklu kareden gerçek uzun pozlama birleştirmesi değildir.
