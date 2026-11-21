@@ -32,3 +32,25 @@ CodeFormer Core ML conversions are not interchangeable: use a conversion whose i
 - This integration is for still-photo processing. Video-frame AI processing is not enabled; existing video grading/export remains on-device through AVFoundation and Core Image.
 - Core ML model interfaces vary by converter. A model that uses unsupported feature types or custom multi-input preprocessing will be rejected with an explanatory error rather than silently producing a misleading result.
 - Model quality, memory use, and speed depend on the exact conversion and iPhone hardware. Test with copies of original photos first.
+
+## Yapay Zekâ sekmesi ve slash komutları
+
+The editor includes a separate **Yapay Zekâ** tab and a local slash-command router. Commands can be entered individually or chained, for example:
+
+`/GLOWUP /BGSTUDIO /SOFTLIGHT`
+
+Native Core Image command implementations currently include:
+
+- `/GLOWUP`, `/BGSTUDIO`, `/SOFTLIGHT`, `/PROSHOT`
+- `/OLD2NEW` (basic tonal/sharpness cleanup; not neural photo restoration)
+- `/HDREAL` (sharpening only; not true super-resolution)
+- `/COLORFIX`, `/NIGHTFIX`
+
+Existing local model commands:
+
+- `/FACEFIX` or `/CODEFORMER` — requires the installed CodeFormer model.
+- `/UPSCALE4X` or `/HDUP` — requires the installed Real-ESRGAN model.
+
+The command router also reserves names for `/GHIBLI`, `/OUTFIT`, `/REMOVEOBJECT`, `/BGCINEMATIC`, `/MISTY-HILLS`, `/STORM-COAST`, and `/GOLDEN-COAST`. These require task-specific generative models and preprocessing (for example, a style-transfer model, segmentation plus inpainting, or virtual try-on). The app deliberately reports that a model is required instead of pretending a conventional color filter performs those edits. They are not active generative features yet.
+
+All currently implemented Core Image effects run locally. The command palette does not upload photos.
