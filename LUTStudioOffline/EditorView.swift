@@ -216,6 +216,7 @@ struct EditorView: View {
     @State private var slashCommandText = "/GLOWUP"
     @AppStorage("cloudAIPhotoUploadEnabled") private var cloudAIPhotoUploadEnabled = false
     @AppStorage("cloudAIEndpoint") private var cloudAIEndpoint = ""
+    @AppStorage("cloudAIAppToken") private var cloudAIAppToken = ""
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     nonisolated(unsafe) private static let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -572,6 +573,12 @@ struct EditorView: View {
                         .font(.system(size: 10, design: .monospaced))
                         .padding(10)
                         .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                    SecureField("Sunucu uygulama erişim anahtarı", text: $cloudAIAppToken)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 10, design: .monospaced))
+                        .padding(10)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
                     Text("Bulut seçeneği açıkken fotoğrafın, yazdığın komutlarla işlenmek üzere sunucuya gönderilir. Kapalıysa fotoğraf cihazdan çıkmaz. API anahtarı uygulamada tutulmaz.")
                         .font(.system(size: 9))
                         .foregroundStyle(.white.opacity(0.55))
@@ -704,7 +711,8 @@ struct EditorView: View {
                     commands: commands,
                     localModels: localAIModels,
                     cloudEndpoint: cloudAIEndpoint,
-                    allowCloudUpload: cloudAIPhotoUploadEnabled
+                    allowCloudUpload: cloudAIPhotoUploadEnabled,
+                    cloudAccessToken: cloudAIAppToken
                 )
                 let result = processing.image
                 guard let data = result.jpegData(compressionQuality: 0.98) else {
