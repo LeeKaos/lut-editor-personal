@@ -13,6 +13,7 @@
 		A10000000000000000000005 /* LocalAIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* LocalAIModels.swift */; };
 		A10000000000000000000006 /* AICommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AICommandEngine.swift */; };
 		A10000000000000000000009 /* HybridAIProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* HybridAIProcessor.swift */; };
+		A10000000000000000000010 /* CloudAIAppTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* CloudAIAppTokenStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,6 +26,7 @@
 		A20000000000000000000007 /* LocalAIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAIModels.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* AICommandEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommandEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* HybridAIProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridAIProcessor.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* CloudAIAppTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAIAppTokenStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,6 +51,7 @@
 					A20000000000000000000007 /* LocalAIModels.swift */,
 					A20000000000000000000008 /* AICommandEngine.swift */,
 					A20000000000000000000009 /* HybridAIProcessor.swift */,
+					A20000000000000000000010 /* CloudAIAppTokenStore.swift */,
 					A20000000000000000000003 /* Filters */,
 					A20000000000000000000004 /* Info.plist */,
 				);
@@ -84,7 +87,8 @@
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-			A60000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* LUTStudioOfflineApp.swift in Sources */, A10000000000000000000002 /* EditorView.swift in Sources */, A10000000000000000000004 /* ProjectsHomeView.swift in Sources */, A10000000000000000000005 /* LocalAIModels.swift in Sources */, A10000000000000000000006 /* AICommandEngine.swift in Sources */, A10000000000000000000009 /* HybridAIProcessor.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+			A60000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* LUTStudioOfflineApp.swift in Sources */, A10000000000000000000002 /* EditorView.swift in Sources */, A10000000000000000000004 /* ProjectsHomeView.swift in Sources */, A10000000000000000000005 /* LocalAIModels.swift in Sources */, A10000000000000000000006 /* AICommandEngine.swift in Sources */, A10000000000000000000009 /* HybridAIProcessor.swift in Sources */,
+				A10000000000000000000010 /* CloudAIAppTokenStore.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
