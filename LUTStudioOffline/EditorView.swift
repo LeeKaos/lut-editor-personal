@@ -546,69 +546,125 @@ struct EditorView: View {
 
 
     private var aiPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 9) {
-                Image(systemName: "wand.and.stars").foregroundStyle(accent).font(.system(size: 22))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Yapay Zekâ Stüdyosu").font(.system(size: 16, weight: .semibold))
-                    Text("Komut yaz veya hazır efekt seç").font(.system(size: 11)).foregroundStyle(.white.opacity(0.58))
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 15) {
+                HStack(spacing: 9) {
+                    Image(systemName: "wand.and.stars").foregroundStyle(accent).font(.system(size: 22))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Yapay Zekâ Stüdyosu").font(.system(size: 16, weight: .semibold))
+                        Text("Fotoğrafını seç, bir efekte dokun").font(.system(size: 11)).foregroundStyle(.white.opacity(0.58))
+                    }
+                    Spacer()
+                    Text("CİHAZ İÇİ").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
                 }
-                Spacer()
-                Text("CİHAZ İÇİ").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
-            }
-            HStack(spacing: 8) {
-                TextField("/GLOWUP", text: $slashCommandText)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .padding(12)
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                Button {
-                    runSlashCommand(slashCommandText)
-                } label: {
-                    Image(systemName: "play.fill").foregroundStyle(.black)
-                        .frame(width: 44, height: 44)
-                        .background(accent, in: RoundedRectangle(cornerRadius: 10))
+
+                HStack(spacing: 8) {
+                    TextField("/GLOWUP /SOFTLIGHT", text: $slashCommandText)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .padding(12)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    Button { runSlashCommand(slashCommandText) } label: {
+                        Image(systemName: "play.fill").foregroundStyle(.black)
+                            .frame(width: 44, height: 44)
+                            .background(accent, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .disabled(imageURL == nil || isRunningAI)
                 }
-                .disabled(imageURL == nil || isRunningAI)
+
+                aiCommandSection("TEK DOKUNUŞLA EFEKTLER",
+                                subtitle: "Core Image • Fotoğrafa anında uygulanır",
+                                commands: ["/GLOWUP", "/BGSTUDIO", "/SOFTLIGHT", "/PROSHOT",
+                                           "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX"])
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("CORE ML MODELLERİ").font(.system(size: 10, weight: .bold)).tracking(1)
+                    Text("Modelleri Dosyalar uygulamasından ekleyebilirsin. İşlem cihaz üzerinde yapılır.")
+                        .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                    aiModelRow(title: "CodeFormer • Yüz iyileştirme", command: "/FACEFIX",
+                               kind: .codeFormer, symbol: "face.smiling")
+                    aiModelRow(title: "Real-ESRGAN • 4× büyütme", command: "/UPSCALE4X",
+                               kind: .realESRGAN, symbol: "arrow.up.left.and.arrow.down.right")
+                }
+
+                aiCommandSection("ÜRETKEN DÜZENLEME",
+                                subtitle: "Gerekli özel model ve görev hattı henüz entegre edilmedi",
+                                commands: ["/GHIBLI", "/OUTFIT", "/REMOVEOBJECT", "/BGCINEMATIC",
+                                           "/MISTY-HILLS", "/STORM-COAST", "/GOLDEN-COAST"])
+
+                if isRunningAI {
+                    HStack(spacing: 8) {
+                        ProgressView().tint(accent)
+                        Text("Efekt uygulanıyor…").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                if !aiStatusMessage.isEmpty {
+                    Text(aiStatusMessage)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Efekt butonları seçili fotoğrafı işler ve sonucu önizlemede gösterir. Üretken düzenleme komutları, uygun model ve maskeleme/üretim hattı eklenene kadar çalıştırılamaz; uygulama bunu açıkça bildirir.")
+                    .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
             }
-            Text("HIZLI KOMUTLAR").font(.system(size: 9, weight: .bold)).tracking(1)
-                .foregroundStyle(.white.opacity(0.55))
+            .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
+            .foregroundStyle(.white)
+        }
+    }
+
+    private func aiCommandSection(_ title: String, subtitle: String, commands: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 10, weight: .bold)).tracking(1)
+            Text(subtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(["/GLOWUP", "/BGSTUDIO", "/SOFTLIGHT", "/PROSHOT",
-                         "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX",
-                         "/GHIBLI", "/OUTFIT", "/REMOVEOBJECT", "/BGCINEMATIC",
-                         "/MISTY-HILLS", "/STORM-COAST", "/GOLDEN-COAST",
-                         "/FACEFIX", "/UPSCALE4X"], id: \.self) { command in
+                ForEach(commands, id: \.self) { command in
                     Button {
                         slashCommandText = command
                         runSlashCommand(command)
                     } label: {
                         HStack {
                             Text(command).font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            Spacer()
-                            Image(systemName: "arrow.up.right").font(.system(size: 9))
+                            Spacer(minLength: 2)
+                            Image(systemName: "play.fill").font(.system(size: 8))
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 11)
-                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                        .padding(.horizontal, 10).padding(.vertical, 12)
+                        .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 9))
                     }
                     .buttonStyle(.plain)
                     .disabled(imageURL == nil || isRunningAI)
                 }
             }
-            if isRunningAI {
-                HStack(spacing: 8) {
-                    ProgressView().tint(accent)
-                    Text("Efekt uygulanıyor…").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+        }
+    }
+
+    private func aiModelRow(title: String, command: String, kind: LocalAIModelKind, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).foregroundStyle(accent).frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 11, weight: .semibold))
+                Text(localAIModels.loadedKinds.contains(kind) ? "Model hazır" : "Model yüklenmedi")
+                    .font(.system(size: 9)).foregroundStyle(.white.opacity(0.52))
+            }
+            Spacer()
+            Button(localAIModels.loadedKinds.contains(kind) ? "Uygula" : "Model ekle") {
+                if localAIModels.loadedKinds.contains(kind) {
+                    slashCommandText = command
+                    runSlashCommand(command)
+                } else {
+                    pendingAIKind = kind
+                    isImportingAIModel = true
                 }
             }
-            Text("GLOWUP, BGSTUDIO, SOFTLIGHT, PROSHOT, OLD2NEW, HDREAL, COLORFIX ve NIGHTFIX temel cihaz içi görüntü işlemleridir. GHIBLI, OUTFIT, nesne silme ve üretken arka plan değişimi için ayrıca uyumlu Core ML üretken model gerekir.")
-                .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
-            Spacer(minLength: 0)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 11).padding(.vertical, 8)
+            .background(accent, in: Capsule())
+            .disabled(isRunningAI || (imageURL == nil && localAIModels.loadedKinds.contains(kind)))
         }
-        .padding(.horizontal, 20).padding(.top, 8)
-        .foregroundStyle(.white)
+        .padding(10)
+        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func runSlashCommand(_ rawCommand: String) {
