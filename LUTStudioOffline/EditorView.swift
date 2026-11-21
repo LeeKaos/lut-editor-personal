@@ -577,7 +577,9 @@ struct EditorView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                 ForEach(["/GLOWUP", "/BGSTUDIO", "/SOFTLIGHT", "/PROSHOT",
                          "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX",
-                         "/GHIBLI", "/OUTFIT"], id: \.self) { command in
+                         "/GHIBLI", "/OUTFIT", "/REMOVEOBJECT", "/BGCINEMATIC",
+                         "/MISTY-HILLS", "/STORM-COAST", "/GOLDEN-COAST",
+                         "/FACEFIX", "/UPSCALE4X"], id: \.self) { command in
                     Button {
                         slashCommandText = command
                         runSlashCommand(command)
