@@ -214,6 +214,8 @@ struct EditorView: View {
     @State private var isRunningAI = false
     @State private var aiStatusMessage: String?
     @State private var slashCommandText = "/GLOWUP"
+    @AppStorage("cloudAIPhotoUploadEnabled") private var cloudAIPhotoUploadEnabled = false
+    @AppStorage("cloudAIEndpoint") private var cloudAIEndpoint = ""
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
     nonisolated(unsafe) private static let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -558,6 +560,25 @@ struct EditorView: View {
                     Text("CİHAZ İÇİ").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
                 }
 
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: $cloudAIPhotoUploadEnabled) {
+                        Text("Bulut AI ile yüksek kalite").font(.system(size: 11, weight: .semibold))
+                    }
+                    .tint(accent)
+                    TextField("HTTPS bulut AI sunucu adresi", text: $cloudAIEndpoint)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.system(size: 10, design: .monospaced))
+                        .padding(10)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                    Text("Bulut seçeneği açıkken fotoğrafın, yazdığın komutlarla işlenmek üzere sunucuya gönderilir. Kapalıysa fotoğraf cihazdan çıkmaz. API anahtarı uygulamada tutulmaz.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .padding(11)
+                .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+
                 HStack(spacing: 8) {
                     TextField("/GLOWUP /SOFTLIGHT", text: $slashCommandText)
                         .textInputAutocapitalization(.characters)
@@ -678,17 +699,14 @@ struct EditorView: View {
         Task {
             defer { isRunningAI = false }
             do {
-                var result = source
-                for command in commands {
-                    switch command {
-                    case .faceRestore:
-                        result = try await localAIModels.enhance(result, using: .codeFormer)
-                    case .hdReal:
-                        result = try await localAIModels.enhance(result, using: .realESRGAN)
-                    default:
-                        result = try AICommandEngine.apply(command, to: result)
-                    }
-                }
+                let processing = try await HybridAIProcessor.process(
+                    source,
+                    commands: commands,
+                    localModels: localAIModels,
+                    cloudEndpoint: cloudAIEndpoint,
+                    allowCloudUpload: cloudAIPhotoUploadEnabled
+                )
+                let result = processing.image
                 guard let data = result.jpegData(compressionQuality: 0.98) else {
                     throw LocalAIError.invalidModelOutput
                 }
@@ -697,7 +715,9 @@ struct EditorView: View {
                 photoPreview = result
                 imageURL = savedURL
                 isShowingOriginal = false
-                aiStatusMessage = "\(commands.map(\.title).joined(separator: " + ")) tamamlandı. Sonucu dışa aktarabilirsin."
+                let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
+                let fallback = processing.cloudFallbackMessage.map { " ($0)" } ?? ""
+                aiStatusMessage = "(commands.map(\.title).joined(separator: " + ")) tamamlandı • (route).(fallback) Sonucu dışa aktarabilirsin."
             } catch {
                 aiStatusMessage = error.localizedDescription
             }
