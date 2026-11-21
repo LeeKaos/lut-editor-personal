@@ -107,7 +107,7 @@ struct CloudAIClient {
         }
     }
 
-    func process(_ image: UIImage, commands: [AICommand], endpoint: String) async throws -> UIImage {
+    func process(_ image: UIImage, commands: [AICommand], endpoint: String, accessToken: String) async throws -> UIImage {
         guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             throw CloudAIError.endpointNotConfigured
         }
@@ -130,6 +130,9 @@ struct CloudAIClient {
         request.timeoutInterval = 180
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !accessToken.isEmpty {
+            request.setValue(accessToken, forHTTPHeaderField: "X-App-Token")
+        }
         request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -165,7 +168,8 @@ enum HybridAIProcessor {
         commands: [AICommand],
         localModels: LocalAIModelStore,
         cloudEndpoint: String,
-        allowCloudUpload: Bool
+        allowCloudUpload: Bool,
+        cloudAccessToken: String
     ) async throws -> AIProcessingResult {
         var cloudFailure: String?
 
@@ -174,7 +178,7 @@ enum HybridAIProcessor {
                 cloudFailure = CloudAIError.endpointNotConfigured.localizedDescription
             } else {
                 do {
-                    let output = try await CloudAIClient().process(image, commands: commands, endpoint: cloudEndpoint)
+                    let output = try await CloudAIClient().process(image, commands: commands, endpoint: cloudEndpoint, accessToken: cloudAccessToken)
                     return AIProcessingResult(image: output, usedCloud: true, cloudFallbackMessage: nil)
                 } catch {
                     cloudFailure = "Bulut işlemi tamamlanamadı; yerel işlem deneniyor. \(error.localizedDescription)"
