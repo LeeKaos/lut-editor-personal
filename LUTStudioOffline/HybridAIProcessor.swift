@@ -169,12 +169,16 @@ enum HybridAIProcessor {
     ) async throws -> AIProcessingResult {
         var cloudFailure: String?
 
-        if allowCloudUpload, !cloudEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            do {
-                let output = try await CloudAIClient().process(image, commands: commands, endpoint: cloudEndpoint)
-                return AIProcessingResult(image: output, usedCloud: true, cloudFallbackMessage: nil)
-            } catch {
-                cloudFailure = "Bulut işlemi tamamlanamadı; yerel işlem deneniyor. \(error.localizedDescription)"
+        if allowCloudUpload {
+            if cloudEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                cloudFailure = CloudAIError.endpointNotConfigured.localizedDescription
+            } else {
+                do {
+                    let output = try await CloudAIClient().process(image, commands: commands, endpoint: cloudEndpoint)
+                    return AIProcessingResult(image: output, usedCloud: true, cloudFallbackMessage: nil)
+                } catch {
+                    cloudFailure = "Bulut işlemi tamamlanamadı; yerel işlem deneniyor. \(error.localizedDescription)"
+                }
             }
         }
 
