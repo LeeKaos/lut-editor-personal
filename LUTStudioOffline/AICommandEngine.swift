@@ -123,11 +123,8 @@ enum AICommandEngine {
         case .hdReal:
             filter("CISharpenLuminance", ["inputSharpness": 0.45, "inputRadius": 1.0])
         case .colorFix:
-            let auto = output.autoAdjustmentFilters(options: [.enhance: true, .redEye: false])
-            for effect in auto {
-                effect.setValue(output, forKey: kCIInputImageKey)
-                output = effect.outputImage?.cropped(to: extent) ?? output
-            }
+            filter("CIHighlightShadowAdjust", ["inputShadowAmount": 0.22, "inputHighlightAmount": 0.9])
+            filter("CIColorControls", [kCIInputContrastKey: 1.06, kCIInputSaturationKey: 1.04])
         case .nightFix:
             filter("CIExposureAdjust", ["inputEV": 0.55])
             filter("CIHighlightShadowAdjust", ["inputShadowAmount": 0.72, "inputHighlightAmount": 0.8])
