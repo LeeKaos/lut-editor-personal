@@ -71,11 +71,12 @@ enum AICommandEngine {
         "UPSCALE4X": .upscale, "HDUP": .upscale
     ]
 
-    static func command(from raw: String) -> AICommand? {
-        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? ""
-        let normalized = token.hasPrefix("/") ? String(token.dropFirst()) : token
-        return aliases[normalized.uppercased()]
+    static func commands(from raw: String) -> [AICommand] {
+        raw.split(whereSeparator: { $0.isWhitespace }).compactMap { part in
+            let token = String(part)
+            let normalized = token.hasPrefix("/") ? String(token.dropFirst()) : token
+            return aliases[normalized.uppercased()]
+        }
     }
 
     static func apply(_ command: AICommand, to image: UIImage) throws -> UIImage {
