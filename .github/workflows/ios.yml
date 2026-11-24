@@ -2,7 +2,7 @@ name: Build LumaGrade IPA
 
 on:
   push:
-    branches: [codex/lumagrade-build]
+    branches: [main, codex/lumagrade-build]
   workflow_dispatch:
 
 jobs:
