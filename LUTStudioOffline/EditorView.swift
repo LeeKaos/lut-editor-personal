@@ -563,7 +563,7 @@ struct EditorView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(isOn: $cloudAIPhotoUploadEnabled) {
-                        Text("Bulut AI ile yüksek kalite").font(.system(size: 11, weight: .semibold))
+                        Text("Çok sağlayıcılı Bulut AI").font(.system(size: 11, weight: .semibold))
                     }
                     .tint(accent)
                     TextField("HTTPS bulut AI sunucu adresi", text: $cloudAIEndpoint)
@@ -582,7 +582,7 @@ struct EditorView: View {
                         .onChange(of: cloudAIAppToken) { _, newValue in
                             CloudAIAppTokenStore.save(newValue)
                         }
-                    Text("Bulut seçeneği açıkken fotoğrafın, yazdığın komutlarla işlenmek üzere sunucuya gönderilir. Kapalıysa fotoğraf cihazdan çıkmaz. API anahtarı uygulamada tutulmaz.")
+                    Text("Açıkken fotoğraf Gemini/Groq ile analiz edilir, Hugging Face modeliyle düzenlenir; isteğe bağlı OpenAI yedek olabilir. Kapalıysa fotoğraf cihazdan çıkmaz. Sağlayıcı anahtarları yalnızca sunucuda tutulur.")
                         .font(.system(size: 9))
                         .foregroundStyle(.white.opacity(0.55))
                 }
@@ -632,7 +632,7 @@ struct EditorView: View {
                         .foregroundStyle(accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("Efektler cihaz üzerinde çalışır. FACEFIX ve HDREAL, ilgili Core ML modellerini kullanır; diğer efektler Core Image ile anında uygulanır.")
+                Text("Bulut: Gemini Flash analiz, Groq Vision yedek, Hugging Face görsel düzenleme. Yerel: FACEFIX/HDREAL için Core ML; diğer efektler Core Image.")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
             }
             .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
@@ -729,9 +729,15 @@ struct EditorView: View {
                 let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
                 let fallback = processing.cloudFallbackMessage ?? ""
                 let commandNames = commands.map(\.title).joined(separator: " + ")
+                var details: [String] = []
+                if let provider = processing.cloudProvider { details.append("Düzenleme: " + provider) }
+                if let analyzer = processing.analysisProvider { details.append("Analiz: " + analyzer) }
+                if let summary = processing.analysisSummary, !summary.isEmpty { details.append(summary) }
+                if !processing.recommendations.isEmpty { details.append("Öneriler: " + processing.recommendations.joined(separator: " • ")) }
                 aiStatusMessage = commandNames + " tamamlandı • " + route
+                    + (details.isEmpty ? "" : "\n" + details.joined(separator: "\n"))
                     + (fallback.isEmpty ? "" : " (" + fallback + ")")
-                    + " Sonucu dışa aktarabilirsin."
+                    + "\nSonucu dışa aktarabilirsin."
             } catch {
                 aiStatusMessage = error.localizedDescription
             }
