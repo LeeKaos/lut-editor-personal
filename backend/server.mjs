@@ -236,6 +236,7 @@ async function handleProcess(req, res) {
     provider: edited.provider,
     analysis,
     analysis_provider: analysis?.provider || null,
+    analysis_summary: analysis?.summary || null,
     recommendations: Array.isArray(analysis?.recommendations) ? analysis.recommendations.slice(0, 4) : [],
     recommended_commands: Array.isArray(analysis?.recommended_commands) ? analysis.recommended_commands.slice(0, 4) : []
   });
