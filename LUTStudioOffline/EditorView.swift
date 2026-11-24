@@ -589,6 +589,23 @@ struct EditorView: View {
                 .padding(11)
                 .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
 
+                Button {
+                    analyzeCurrentPhoto()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "viewfinder")
+                        Text("Fotoğrafı analiz et ve ayar öner")
+                        Spacer()
+                        Image(systemName: "sparkles")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .padding(12)
+                    .background(accent, in: RoundedRectangle(cornerRadius: 9))
+                }
+                .buttonStyle(.plain)
+                .disabled(imageURL == nil || isRunningAI || !cloudAIPhotoUploadEnabled)
+
                 HStack(spacing: 8) {
                     TextField("/GLOWUP /SOFTLIGHT", text: $slashCommandText)
                         .textInputAutocapitalization(.characters)
@@ -692,6 +709,45 @@ struct EditorView: View {
         }
         .padding(10)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func analyzeCurrentPhoto() {
+        guard cloudAIPhotoUploadEnabled else {
+            aiStatusMessage = "Önce Bulut AI seçeneğini açmalısın."
+            return
+        }
+        guard let currentURL = imageURL,
+              let source = UIImage(contentsOfFile: currentURL.path) else {
+            aiStatusMessage = "Önce galeriden bir fotoğraf seçmelisin."
+            return
+        }
+        isRunningAI = true
+        aiStatusMessage = "Fotoğraf Gemini Flash ile analiz ediliyor…"
+        Task {
+            defer { isRunningAI = false }
+            do {
+                let analysis = try await CloudAIClient().analyze(
+                    source,
+                    endpoint: cloudAIEndpoint,
+                    accessToken: cloudAIAppToken
+                )
+                var lines: [String] = []
+                if let summary = analysis.summary { lines.append(summary) }
+                if let lighting = analysis.lighting { lines.append("Işık: " + lighting) }
+                if let color = analysis.color { lines.append("Renk: " + color) }
+                if let composition = analysis.composition { lines.append("Kompozisyon: " + composition) }
+                if !analysis.recommendations.isEmpty {
+                    lines.append("Öneriler: " + analysis.recommendations.joined(separator: " • "))
+                }
+                if !analysis.recommendedCommands.isEmpty {
+                    lines.append("Komut önerisi: " + analysis.recommendedCommands.map { "/" + $0 }.joined(separator: " "))
+                }
+                aiStatusMessage = "Fotoğraf analizi tamamlandı • " + (analysis.provider ?? "Bulut AI")
+                    + "\\n" + lines.joined(separator: "\\n")
+            } catch {
+                aiStatusMessage = error.localizedDescription
+            }
+        }
     }
 
     private func runSlashCommand(_ rawCommand: String) {
