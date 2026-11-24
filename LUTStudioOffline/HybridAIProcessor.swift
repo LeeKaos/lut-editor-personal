@@ -123,6 +123,14 @@ struct CloudAIClient {
         }
     }
 
+    struct Output {
+        let image: UIImage
+        let provider: String?
+        let analysisProvider: String?
+        let analysisSummary: String?
+        let recommendations: [String]
+    }
+
     struct AnalysisOutput {
         let provider: String?
         let summary: String?
