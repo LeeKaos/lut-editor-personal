@@ -14,6 +14,7 @@
 		A10000000000000000000006 /* AICommandEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AICommandEngine.swift */; };
 		A10000000000000000000009 /* HybridAIProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* HybridAIProcessor.swift */; };
 		A10000000000000000000010 /* CloudAIAppTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* CloudAIAppTokenStore.swift */; };
+        A10000000000000000000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +28,7 @@
 		A20000000000000000000008 /* AICommandEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICommandEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* HybridAIProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridAIProcessor.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* CloudAIAppTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAIAppTokenStore.swift; sourceTree = "<group>"; };
+        A20000000000000000000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +55,7 @@
 					A20000000000000000000009 /* HybridAIProcessor.swift */,
 					A20000000000000000000010 /* CloudAIAppTokenStore.swift */,
 					A20000000000000000000003 /* Filters */,
+                    A20000000000000000000011 /* Assets.xcassets */,
 					A20000000000000000000004 /* Info.plist */,
 				);
 				path = LUTStudioOffline;
@@ -92,11 +95,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
-			A60000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000003 /* Filters in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
+			A60000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000003 /* Filters in Resources */, A10000000000000000000011 /* Assets.xcassets in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-			A80000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LUTStudioOffline/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.personal.luteditor; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+			A80000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LUTStudioOffline/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.personal.luteditor; PRODUCT_NAME = "$(TARGET_NAME)"; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
 			A80000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LUTStudioOffline/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.personal.luteditor; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 /* End XCBuildConfiguration section */
 
