@@ -144,6 +144,11 @@ enum CustomLUTStore {
     }
 }
 
+private enum EditorHistoryEntry {
+    case settings(GradeSettings)
+    case image(Data)
+}
+
 final class ProjectLibrary: ObservableObject {
     @Published var projects: [GradeProject] = [] { didSet { save() } }
     private let key = "lumagrade.projects.v1"
@@ -192,6 +197,7 @@ struct ProjectsView: View {
     @State private var importError: String?
     @State private var isSelectingProjects = false
     @State private var selectedProjectIDs = Set<UUID>()
+    @State private var showingBatchDeleteConfirmation = false
     @State private var showingBatchGrade = false
     @State private var showingBatchExport = false
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 12)]
@@ -224,6 +230,12 @@ struct ProjectsView: View {
                         }
                         .disabled(selectedProjects.isEmpty)
                         .background(Color.white.opacity(selectedProjects.isEmpty ? 0.08 : 0.15), in: Capsule())
+                        Button(role: .destructive) { showingBatchDeleteConfirmation = true } label: {
+                            Label("Sil", systemImage: "trash").frame(maxWidth: .infinity).frame(height: 48)
+                        }
+                        .disabled(selectedProjects.isEmpty)
+                        .background(Color.red.opacity(selectedProjects.isEmpty ? 0.08 : 0.18), in: Capsule())
+                        .foregroundStyle(selectedProjects.isEmpty ? .white.opacity(0.45) : .red)
                     }
                     .font(.system(size: 12, weight: .semibold))
                     .padding(.horizontal, 16).padding(.bottom, 18)
@@ -269,6 +281,17 @@ struct ProjectsView: View {
                     .disabled(isImportingMedia)
                     }
                 }
+            }
+            .confirmationDialog("Seçili projeleri sil?", isPresented: $showingBatchDeleteConfirmation, titleVisibility: .visible) {
+                Button("Seçili projeleri sil (\(selectedProjects.count))", role: .destructive) {
+                    let projectsToDelete = selectedProjects
+                    for item in projectsToDelete { library.remove(item) }
+                    selectedProjectIDs.removeAll()
+                    isSelectingProjects = false
+                }
+                Button("Vazgeç", role: .cancel) { }
+            } message: {
+                Text("Bu işlem seçilen projelerin dosyalarını ve kayıtlarını kalıcı olarak siler.")
             }
             .confirmationDialog("Yeni Proje", isPresented: $choosingMedia, titleVisibility: .visible) {
                 Button("Fotoğraf Seç", systemImage: "photo") { showingImagePicker = true }
@@ -746,7 +769,8 @@ struct EditorView: View {
     @State private var showingOriginal = false; @State private var showingFullscreen = false; @State private var showingExportSettings = false; @State private var isFavorite = false
     @State private var showingPresets = false
     @State private var favoriteLUTNames = Set(UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteLUTs") ?? [])
-    @State private var undoStack: [GradeSettings] = []; @State private var redoStack: [GradeSettings] = []; @State private var navigatingHistory = false
+    @State private var undoStack: [EditorHistoryEntry] = []; @State private var redoStack: [EditorHistoryEntry] = []; @State private var navigatingHistory = false
+    @State private var imageRevision = 0
     @State private var isExporting = false; @State private var exportProgress = 0.0
     @State private var showingFileExportPicker = false; @State private var fileExportURLs: [URL] = []
     private var isVideo: Bool { ["mov", "mp4", "m4v"].contains(URL(fileURLWithPath: project.fileName).pathExtension.lowercased()) }
@@ -810,8 +834,8 @@ struct EditorView: View {
             .onChange(of: project.settings) { oldValue, newValue in
                 updateVideoComposition()
                 guard !navigatingHistory, oldValue != newValue else { navigatingHistory = false; return }
-                undoStack.append(oldValue)
-                if undoStack.count > 100 { undoStack.removeFirst() }
+                undoStack.append(.settings(oldValue))
+                if undoStack.count > 50 { undoStack.removeFirst() }
                 redoStack.removeAll()
             }
             .onChange(of: project.settings.lutName) { _, name in
@@ -932,6 +956,7 @@ struct EditorView: View {
                     .overlay(alignment: .top) { if showingOriginal { Text("ORİJİNAL").font(.caption.bold()).padding(8).background(.black.opacity(0.7), in: Capsule()).padding(.top, 10) } }
             } else { ContentUnavailableView("Orijinal dosya bulunamadı", systemImage: "exclamationmark.triangle") }
         }
+        .id(imageRevision)
     }
     private var previewActions: some View {
         HStack(spacing: 28) {
@@ -982,12 +1007,41 @@ struct EditorView: View {
         }
     }
     private func undo() {
-        guard let previous = undoStack.popLast() else { return }
-        redoStack.append(project.settings); navigatingHistory = true; project.settings = previous
+        guard let entry = undoStack.popLast() else { return }
+        switch entry {
+        case .settings(let previous):
+            redoStack.append(.settings(project.settings))
+            navigatingHistory = true
+            project.settings = previous
+        case .image(let previousData):
+            let currentURL = library.videoURL(for: project)
+            guard let currentData = try? Data(contentsOf: currentURL) else { return }
+            redoStack.append(.image(currentData))
+            restoreProjectImage(previousData)
+        }
     }
     private func redo() {
-        guard let next = redoStack.popLast() else { return }
-        undoStack.append(project.settings); navigatingHistory = true; project.settings = next
+        guard let entry = redoStack.popLast() else { return }
+        switch entry {
+        case .settings(let next):
+            undoStack.append(.settings(project.settings))
+            navigatingHistory = true
+            project.settings = next
+        case .image(let nextData):
+            let currentURL = library.videoURL(for: project)
+            guard let currentData = try? Data(contentsOf: currentURL) else { return }
+            undoStack.append(.image(currentData))
+            restoreProjectImage(nextData)
+        }
+    }
+    private func restoreProjectImage(_ data: Data) {
+        do {
+            try data.write(to: library.videoURL(for: project), options: .atomic)
+            imageRevision += 1
+            library.update(project)
+        } catch {
+            exportMessage = "Proje görseli geri yüklenemedi: \(error.localizedDescription)"
+        }
     }
     private func toggleFavorite() {
         var favorites = Set(UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteProjects") ?? [])
@@ -1031,14 +1085,25 @@ struct EditorView: View {
             deepLPFError = "DeepLPF sonucu kaydedilemedi."
             return
         }
+        let sourceURL = library.videoURL(for: project)
+        guard let originalData = try? Data(contentsOf: sourceURL) else {
+            deepLPFError = "Mevcut proje dosyası okunamadı."
+            return
+        }
         do {
-            library.update(project)
-            project = try library.add(imageData: data, fileExtension: "jpg", source: "Regular")
+            undoStack.append(.image(originalData))
+            if undoStack.count > 50 { undoStack.removeFirst() }
+            redoStack.removeAll()
+            try data.write(to: sourceURL, options: .atomic)
+            var neutralSettings = GradeSettings()
+            neutralSettings.source = project.settings.source
+            project.settings = neutralSettings
+            imageRevision += 1
             importedLUT = nil
             sourceLUT = nil
-            tab = 0
+            library.update(project)
         } catch {
-            deepLPFError = "DeepLPF sonucu yeni projeye eklenemedi: \(error.localizedDescription)"
+            deepLPFError = "Sonuç mevcut projeye uygulanamadı: \(error.localizedDescription)"
         }
     }
     private func applySepLUT(_ lut: CubeLUT, intensity: Double) {
