@@ -1,34 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
 <defs>
- <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#20242d"/><stop offset=".48" stop-color="#07090e"/><stop offset="1" stop-color="#171019"/></linearGradient>
- <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff2b0"/><stop offset=".25" stop-color="#d69b38"/><stop offset=".55" stop-color="#fff0a0"/><stop offset="1" stop-color="#8d5016"/></linearGradient>
- <linearGradient id="lens" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7b34a"/><stop offset=".34" stop-color="#24182a"/><stop offset=".65" stop-color="#102b45"/><stop offset="1" stop-color="#080b13"/></linearGradient>
- <linearGradient id="cube" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe24e"/><stop offset=".45" stop-color="#f36b31"/><stop offset=".72" stop-color="#a638c7"/><stop offset="1" stop-color="#23b9ef"/></linearGradient>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#151515"/><stop offset=".52" stop-color="#030405"/><stop offset="1" stop-color="#09090c"/></linearGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff4c8"/><stop offset=".22" stop-color="#e9a43e"/><stop offset=".48" stop-color="#fff1ae"/><stop offset=".72" stop-color="#a85d20"/><stop offset="1" stop-color="#ffca62"/></linearGradient>
+ <linearGradient id="film" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#171719"/><stop offset=".5" stop-color="#07080b"/><stop offset="1" stop-color="#282126"/></linearGradient>
+ <radialGradient id="lens" cx="34%" cy="30%" r="78%"><stop stop-color="#ffb13e"/><stop offset=".18" stop-color="#7b3518"/><stop offset=".4" stop-color="#17101a"/><stop offset=".62" stop-color="#071629"/><stop offset=".82" stop-color="#1a0b2e"/><stop offset="1" stop-color="#03050a"/></radialGradient>
+ <linearGradient id="cubeA" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff43b"/><stop offset="1" stop-color="#ff9b17"/></linearGradient>
+ <linearGradient id="cubeB" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffb322"/><stop offset="1" stop-color="#ef362d"/></linearGradient>
+ <linearGradient id="cubeC" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ec2384"/><stop offset="1" stop-color="#7627c9"/></linearGradient>
+ <linearGradient id="cubeD" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3266ee"/><stop offset="1" stop-color="#08c7e9"/></linearGradient>
  <filter id="glow"><feGaussianBlur stdDeviation="13" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
- <radialGradient id="shine"><stop stop-color="#fff2bf" stop-opacity=".95"/><stop offset="1" stop-color="#f3a13c" stop-opacity="0"/></radialGradient>
+ <filter id="soft"><feGaussianBlur stdDeviation="28"/></filter>
 </defs>
-<rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
-<rect x="52" y="52" width="920" height="920" rx="185" fill="none" stroke="url(#gold)" stroke-width="12"/>
-<circle cx="462" cy="445" r="285" fill="#03050a" stroke="url(#gold)" stroke-width="24"/>
-<circle cx="462" cy="445" r="242" fill="url(#lens)" stroke="#a77a3d" stroke-width="10"/>
-<circle cx="462" cy="445" r="185" fill="none" stroke="#d99a46" stroke-opacity=".7" stroke-width="10"/>
-<circle cx="462" cy="445" r="125" fill="none" stroke="#7d8da9" stroke-opacity=".5" stroke-width="7"/>
-<circle cx="390" cy="352" r="90" fill="url(#shine)"/>
-<path d="M155 412 C85 510 110 680 255 772 C420 875 672 815 838 662" fill="none" stroke="url(#gold)" stroke-width="18" stroke-linecap="round" filter="url(#glow)"/>
-<g transform="translate(670 150)" stroke="#24130b" stroke-width="5" stroke-linejoin="round">
- <path d="M0 76 120 8 244 76 124 146Z" fill="#ffe35a"/>
- <path d="M0 76v144l124 72V146Z" fill="#ef8a32"/>
- <path d="M244 76v144l-120 72V146Z" fill="url(#cube)"/>
- <path d="M124 146v146" fill="none" stroke="#fff0b0" stroke-opacity=".65" stroke-width="4"/>
- <path d="M0 148 124 218 244 148" fill="none" stroke="#fff0b0" stroke-opacity=".45" stroke-width="4"/>
+<rect width="1024" height="1024" rx="205" fill="url(#bg)"/>
+<rect x="53" y="53" width="918" height="918" rx="185" fill="none" stroke="#f4a943" stroke-opacity=".6" stroke-width="28" filter="url(#soft)"/>
+<rect x="53" y="53" width="918" height="918" rx="185" fill="none" stroke="url(#gold)" stroke-width="10"/>
+<circle cx="472" cy="442" r="285" fill="#050608" stroke="url(#gold)" stroke-width="17"/>
+<circle cx="472" cy="442" r="259" fill="url(#lens)" stroke="#6e4929" stroke-width="8"/>
+<circle cx="472" cy="442" r="224" fill="none" stroke="#e7a54e" stroke-opacity=".58" stroke-width="10"/>
+<circle cx="472" cy="442" r="194" fill="none" stroke="#0a0c14" stroke-width="18"/>
+<circle cx="472" cy="442" r="161" fill="none" stroke="#a36a3c" stroke-opacity=".72" stroke-width="9"/>
+<circle cx="472" cy="442" r="128" fill="none" stroke="#111b2c" stroke-width="18"/>
+<circle cx="472" cy="442" r="90" fill="none" stroke="#8a3d66" stroke-opacity=".6" stroke-width="10"/>
+<circle cx="472" cy="442" r="54" fill="#090b17" stroke="#294c89" stroke-width="15"/>
+<ellipse cx="394" cy="337" rx="77" ry="49" fill="#ffd58b" opacity=".55" filter="url(#soft)"/>
+<ellipse cx="394" cy="337" rx="49" ry="30" fill="#fff0bc" opacity=".86"/>
+<path d="M176 356 C105 438 141 583 252 677 C398 799 663 746 843 601" fill="none" stroke="url(#gold)" stroke-width="17" stroke-linecap="round" filter="url(#glow)"/>
+<g stroke="#35210d" stroke-width="4" stroke-linejoin="round">
+ <g transform="translate(630 118)">
+  <path d="M0 58 91 6 182 58 91 111Z" fill="url(#cubeA)"/><path d="M0 58v106l91 54V111Z" fill="#e3a51d"/><path d="M182 58v106l-91 54V111Z" fill="#f48a18"/>
+  <path d="M91 111 182 58 273 111 182 164Z" fill="url(#cubeB)"/><path d="M91 111v106l91 54V164Z" fill="#ed6821"/><path d="M273 111v106l-91 54V164Z" fill="#d92f52"/>
+  <path d="M182 164 273 111 364 164 273 217Z" fill="url(#cubeC)"/><path d="M182 164v106l91 54V217Z" fill="#9b31c4"/><path d="M364 164v106l-91 54V217Z" fill="#6135c9"/>
+  <path d="M273 217 364 164 455 217 364 270Z" fill="url(#cubeD)"/><path d="M273 217v106l91 54V270Z" fill="#245fd1"/><path d="M455 217v106l-91 54V270Z" fill="#08b9df"/>
+  <path d="M0 164 91 111 182 164 91 217Z" fill="url(#cubeA)"/><path d="M0 164v106l91 54V217Z" fill="#e0a21b"/><path d="M182 164v106l-91 54V217Z" fill="#ef8a19"/>
+ </g>
 </g>
-<g transform="translate(92 625) rotate(17)">
- <rect width="550" height="150" rx="16" fill="#0a0b10" stroke="url(#gold)" stroke-width="12"/>
- <rect x="30" y="28" width="150" height="94" rx="8" fill="#a35d2c"/>
- <rect x="198" y="28" width="150" height="94" rx="8" fill="#d58a43"/>
- <rect x="366" y="28" width="150" height="94" rx="8" fill="#273c51"/>
- <path d="M30 45h486M30 105h486" stroke="#fff0b0" stroke-opacity=".5" stroke-width="6" stroke-dasharray="16 18"/>
+<g transform="translate(75 584) rotate(17 300 100)">
+ <rect x="0" y="0" width="610" height="208" rx="17" fill="url(#film)" stroke="#a77a50" stroke-width="10"/>
+ <rect x="34" y="38" width="177" height="132" rx="7" fill="#19212b" stroke="#0a0a0c" stroke-width="8"/>
+ <rect x="228" y="38" width="177" height="132" rx="7" fill="#a95d2c" stroke="#0a0a0c" stroke-width="8"/>
+ <rect x="422" y="38" width="154" height="132" rx="7" fill="#203347" stroke="#0a0a0c" stroke-width="8"/>
+ <path d="M35 18h540M35 190h540" stroke="#d7b58c" stroke-width="12" stroke-dasharray="19 17" opacity=".8"/>
+ <path d="M228 162c28-45 57-52 88-74 25-18 52-17 89-50v132H228Z" fill="#ed9c50" opacity=".78"/>
+ <circle cx="318" cy="116" r="25" fill="#ffca76"/>
 </g>
-<text x="680" y="835" fill="url(#gold)" font-family="Arial,Helvetica,sans-serif" font-size="112" font-weight="800" letter-spacing="5">LUT</text>
-<text x="686" y="900" fill="#e8c37d" font-family="Arial,Helvetica,sans-serif" font-size="38" letter-spacing="18">STUDIO</text>
+<path d="M585 814h82" stroke="url(#gold)" stroke-width="6"/>
+<text x="695" y="815" fill="url(#gold)" font-family="Arial,Helvetica,sans-serif" font-size="111" font-style="italic" font-weight="800" letter-spacing="2">LUT</text>
+<text x="695" y="876" fill="#e8c58d" font-family="Arial,Helvetica,sans-serif" font-size="37" letter-spacing="16">STUDIO</text>
 </svg>
