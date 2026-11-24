@@ -28,7 +28,6 @@ jobs:
         run: node --check backend/server.mjs
       - name: Start backend and test health/auth
         env:
-          OPENAI_API_KEY: test-key-not-used
           APP_ACCESS_TOKEN: test-app-token
           PORT: "8080"
         run: |
@@ -41,4 +40,5 @@ jobs:
           curl --silent --fail http://127.0.0.1:8080/health
           test "$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8080/v1/process -H "Content-Type: application/json" -d '{}')" = "401"
           test "$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8080/v1/process -H "Content-Type: application/json" -H "X-App-Token: test-app-token" -d '{}')" = "400"
+          test "$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8080/v1/analyze -H "Content-Type: application/json" -H "X-App-Token: test-app-token" -d '{}')" = "400"
           kill "$(cat /tmp/lut-backend.pid)"
