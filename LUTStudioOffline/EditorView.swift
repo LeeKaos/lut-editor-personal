@@ -763,41 +763,64 @@ struct EditorView: View {
         }
         isRunningAI = true
         Task {
-            defer { isRunningAI = false }
-            do {
-                let processing = try await HybridAIProcessor.process(
-                    source,
-                    commands: commands,
-                    localModels: localAIModels,
-                    cloudEndpoint: cloudAIEndpoint,
-                    allowCloudUpload: cloudAIPhotoUploadEnabled,
-                    cloudAccessToken: cloudAIAppToken
-                )
-                let result = processing.image
-                guard let data = result.jpegData(compressionQuality: 0.98) else {
-                    throw LocalAIError.invalidModelOutput
-                }
-                let savedURL = try ProjectFileStorage.keepImportedPhoto(data)
-                originalPhotoPreview = originalPhotoPreview ?? source
-                photoPreview = result
-                imageURL = savedURL
-                isShowingOriginal = false
-                let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
-                let fallback = processing.cloudFallbackMessage ?? ""
-                let commandNames = commands.map(\.title).joined(separator: " + ")
-                var details: [String] = []
-                if let provider = processing.cloudProvider { details.append("Düzenleme: " + provider) }
-                if let analyzer = processing.analysisProvider { details.append("Analiz: " + analyzer) }
-                if let summary = processing.analysisSummary, !summary.isEmpty { details.append(summary) }
-                if !processing.recommendations.isEmpty { details.append("Öneriler: " + processing.recommendations.joined(separator: " • ")) }
-                aiStatusMessage = commandNames + " tamamlandı • " + route
-                    + (details.isEmpty ? "" : "\n" + details.joined(separator: "\n"))
-                    + (fallback.isEmpty ? "" : " (" + fallback + ")")
-                    + "\nSonucu dışa aktarabilirsin."
-            } catch {
-                aiStatusMessage = error.localizedDescription
-            }
+            await processSlashCommand(source, commands: commands)
         }
+    }
+
+    private func processSlashCommand(_ source: UIImage, commands: [AICommand]) async {
+        defer { isRunningAI = false }
+        do {
+            let processing = try await HybridAIProcessor.process(
+                source,
+                commands: commands,
+                localModels: localAIModels,
+                cloudEndpoint: cloudAIEndpoint,
+                allowCloudUpload: cloudAIPhotoUploadEnabled,
+                cloudAccessToken: cloudAIAppToken
+            )
+            try applyProcessedImage(processing.image, original: source)
+            aiStatusMessage = makeProcessingStatus(processing, commands: commands)
+        } catch {
+            aiStatusMessage = error.localizedDescription
+        }
+    }
+
+    private func applyProcessedImage(_ result: UIImage, original: UIImage) throws {
+        guard let data = result.jpegData(compressionQuality: 0.98) else {
+            throw LocalAIError.invalidModelOutput
+        }
+        let savedURL = try ProjectFileStorage.keepImportedPhoto(data)
+        if originalPhotoPreview == nil { originalPhotoPreview = original }
+        photoPreview = result
+        imageURL = savedURL
+        isShowingOriginal = false
+    }
+
+    private func makeProcessingStatus(
+        _ processing: HybridAIProcessingResult,
+        commands: [AICommand]
+    ) -> String {
+        let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
+        let commandNames = commands.map(\.title).joined(separator: " + ")
+        var details: [String] = []
+        if let provider = processing.cloudProvider {
+            details.append("Düzenleme: " + provider)
+        }
+        if let analyzer = processing.analysisProvider {
+            details.append("Analiz: " + analyzer)
+        }
+        if let summary = processing.analysisSummary, !summary.isEmpty {
+            details.append(summary)
+        }
+        if !processing.recommendations.isEmpty {
+            let recommendations = processing.recommendations.joined(separator: " • ")
+            details.append("Öneriler: " + recommendations)
+        }
+        let detailText = details.isEmpty ? "" : "\\n" + details.joined(separator: "\\n")
+        let fallback = processing.cloudFallbackMessage ?? ""
+        let fallbackText = fallback.isEmpty ? "" : " (" + fallback + ")"
+        return commandNames + " tamamlandı • " + route + detailText + fallbackText
+            + "\\nSonucu dışa aktarabilirsin."
     }
 
     private var customPanel: some View {
