@@ -213,6 +213,9 @@ struct EditorView: View {
     @State private var pendingAIKind: LocalAIModelKind = .realESRGAN
     @State private var isRunningAI = false
     @State private var aiStatusMessage: String?
+    @State private var aiUndoStack: [UIImage] = []
+    @State private var aiRedoStack: [UIImage] = []
+    @State private var aiOriginalImage: UIImage?
     @State private var slashCommandText = "/GLOWUP"
     @AppStorage("cloudAIPhotoUploadEnabled") private var cloudAIPhotoUploadEnabled = false
     @AppStorage("cloudAIEndpoint") private var cloudAIEndpoint = ""
@@ -561,6 +564,32 @@ struct EditorView: View {
                     Text("CİHAZ İÇİ").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
                 }
 
+                HStack(spacing: 10) {
+                    Button { undoAIEdit() } label: {
+                        Label("Geri Al", systemImage: "arrow.uturn.backward")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                    .disabled(aiUndoStack.isEmpty || isRunningAI)
+                    Button { redoAIEdit() } label: {
+                        Label("İleri Al", systemImage: "arrow.uturn.forward")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                    .disabled(aiRedoStack.isEmpty || isRunningAI)
+                    Button { resetAIEdits() } label: {
+                        Label("Sıfırla", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                    .disabled(aiOriginalImage == nil || isRunningAI)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(isOn: $cloudAIPhotoUploadEnabled) {
                         Text("Çok sağlayıcılı Bulut AI").font(.system(size: 11, weight: .semibold))
@@ -779,10 +808,56 @@ struct EditorView: View {
                 cloudAccessToken: cloudAIAppToken
             )
             try applyProcessedImage(processing.image, original: source)
+            if aiOriginalImage == nil { aiOriginalImage = source }
+            aiUndoStack.append(source)
+            aiRedoStack.removeAll()
             aiStatusMessage = makeProcessingStatus(processing, commands: commands)
         } catch {
             aiStatusMessage = error.localizedDescription
         }
+    }
+
+    private func currentAIImage() -> UIImage? {
+        if let photoPreview { return photoPreview }
+        guard let imageURL else { return nil }
+        return UIImage(contentsOfFile: imageURL.path)
+    }
+
+    private func restoreAIImage(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.98) else {
+            aiStatusMessage = "Görsel geçmişten geri yüklenemedi."
+            return
+        }
+        do {
+            let restoredURL = try ProjectFileStorage.keepImportedPhoto(data)
+            imageURL = restoredURL
+            photoPreview = image
+            isShowingOriginal = false
+        } catch {
+            aiStatusMessage = error.localizedDescription
+        }
+    }
+
+    private func undoAIEdit() {
+        guard let previous = aiUndoStack.popLast(), let current = currentAIImage() else { return }
+        aiRedoStack.append(current)
+        restoreAIImage(previous)
+        aiStatusMessage = "Önceki AI düzenlemesine dönüldü."
+    }
+
+    private func redoAIEdit() {
+        guard let next = aiRedoStack.popLast(), let current = currentAIImage() else { return }
+        aiUndoStack.append(current)
+        restoreAIImage(next)
+        aiStatusMessage = "AI düzenlemesi yeniden uygulandı."
+    }
+
+    private func resetAIEdits() {
+        guard let original = aiOriginalImage else { return }
+        restoreAIImage(original)
+        aiUndoStack.removeAll()
+        aiRedoStack.removeAll()
+        aiStatusMessage = "AI düzenlemeleri sıfırlandı."
     }
 
     private func applyProcessedImage(_ result: UIImage, original: UIImage) throws {
@@ -904,7 +979,10 @@ struct EditorView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 20) {
                     ForEach(categories, id: \.self) { item in
-                        Button { category = item } label: {
+                        Button {
+                            category = item
+                            if item != "My Presets" { settings.lutURL = nil }
+                        } label: {
                             Text(item).font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(category == item ? .black : .white)
                                 .padding(.horizontal, 14).padding(.vertical, 7)
@@ -929,6 +1007,25 @@ struct EditorView: View {
                             .contextMenu { Button("Delete Preset", role: .destructive) { deletePreset(preset) } }
                         }
                     } else {
+                    Button { settings.lutURL = nil } label: {
+                        VStack(spacing: 7) {
+                            RoundedRectangle(cornerRadius: 9)
+                                .fill(Color.white.opacity(0.07))
+                                .overlay {
+                                    Image(systemName: "circle.slash")
+                                        .font(.system(size: 21, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.75))
+                                }
+                                .overlay {
+                                    if settings.lutURL == nil {
+                                        RoundedRectangle(cornerRadius: 9).stroke(accent, lineWidth: 2)
+                                    }
+                                }
+                                .frame(width: 76, height: 86)
+                            Text("Yok!").font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                        }
+                        .foregroundStyle(.white)
+                    }
                     ForEach(presets.filter { categoryFor($0.category) == category }) { preset in
                         Button { settings.lutURL = preset.url } label: {
                             VStack(spacing: 7) {
@@ -1151,7 +1248,6 @@ struct EditorView: View {
                 return LUTPreset(name: url.deletingPathExtension().lastPathComponent, category: group, url: url)
             }
         }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        if let first = presets.first(where: { categoryFor($0.category) == category }) { settings.lutURL = first.url }
     }
 
     private func savedPresetsFile() -> URL {
