@@ -6,6 +6,6 @@
   "engines": { "node": ">=20" },
   "scripts": { "start": "node server.mjs", "check": "node --check server.mjs" },
   "dependencies": {
-    "@huggingface/inference": "^4.7.1"
+    "@huggingface/inference": "^4.13.33"
   }
 }
