@@ -180,7 +180,7 @@ struct DeepLPFPanel: View {
 
                 if let enhancedImage {
                     Button { onApply(enhancedImage) } label: {
-                        Label("Sonucu yeni proje olarak kullan", systemImage: "checkmark")
+                        Label("Sonucu mevcut projeye uygula", systemImage: "checkmark")
                             .font(.system(size: 11, weight: .semibold))
                             .frame(maxWidth: .infinity).frame(height: 40)
                             .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
