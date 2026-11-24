@@ -104,6 +104,10 @@ struct CloudAIClient {
         let analysisProvider: String?
         let analysisSummary: String?
         let recommendations: [String]?
+        let lighting: String?
+        let color: String?
+        let composition: String?
+        let recommendedCommands: [String]?
 
         enum CodingKeys: String, CodingKey {
             case imageBase64 = "image_base64"
@@ -112,15 +116,63 @@ struct CloudAIClient {
             case analysisProvider = "analysis_provider"
             case analysisSummary = "analysis_summary"
             case recommendations
+            case lighting
+            case color
+            case composition
+            case recommendedCommands = "recommended_commands"
         }
     }
 
-    struct Output {
-        let image: UIImage
+    struct AnalysisOutput {
         let provider: String?
-        let analysisProvider: String?
-        let analysisSummary: String?
+        let summary: String?
+        let lighting: String?
+        let color: String?
+        let composition: String?
         let recommendations: [String]
+        let recommendedCommands: [String]
+    }
+
+    func analyze(_ image: UIImage, endpoint: String, accessToken: String) async throws -> AnalysisOutput {
+        let processPath = "/v1/process"
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix(processPath),
+              let url = URL(string: String(trimmed.dropLast(processPath.count)) + "/v1/analyze") else {
+            throw CloudAIError.endpointNotConfigured
+        }
+        guard url.scheme?.lowercased() == "https" else { throw CloudAIError.insecureEndpoint }
+        guard let jpeg = image.jpegData(compressionQuality: 0.94) else { throw LocalAIError.invalidImage }
+        let payload = RequestPayload(
+            imageBase64: jpeg.base64EncodedString(),
+            mimeType: "image/jpeg",
+            commands: [],
+            outputFormat: "jpeg",
+            analysis: SmartImageAnalyzer.analyze(image)
+        )
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 90
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !accessToken.isEmpty { request.setValue(accessToken, forHTTPHeaderField: "X-App-Token") }
+        request.httpBody = try JSONEncoder().encode(payload)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw CloudAIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONDecoder().decode(ResponsePayload.self, from: data).error)
+                ?? "Fotoğraf analizi başarısız oldu (HTTP \\(http.statusCode))."
+            throw CloudAIError.server(message)
+        }
+        let result = try JSONDecoder().decode(ResponsePayload.self, from: data)
+        return AnalysisOutput(
+            provider: result.analysisProvider,
+            summary: result.analysisSummary,
+            lighting: result.lighting,
+            color: result.color,
+            composition: result.composition,
+            recommendations: result.recommendations ?? [],
+            recommendedCommands: result.recommendedCommands ?? []
+        )
     }
 
     func process(_ image: UIImage, commands: [AICommand], endpoint: String, accessToken: String) async throws -> Output {
