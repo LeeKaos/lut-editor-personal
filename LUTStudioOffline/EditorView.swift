@@ -1442,6 +1442,9 @@ struct EditorView: View {
         photoPreview = nil
         originalPhotoPreview = nil
         isShowingOriginal = false
+        aiUndoStack.removeAll()
+        aiRedoStack.removeAll()
+        aiOriginalImage = nil
         currentTime = 0
         duration = 0
         loadSettings(for: url)
