@@ -185,6 +185,36 @@ async function editWithOpenAI(imageBytes, mime, prompt, commands) {
   return { bytes: Buffer.from(output, "base64"), provider: `OpenAI ${model}` };
 }
 
+async function handleAnalyze(req, res) {
+  if (!APP_ACCESS_TOKEN) return send(res, 503, { error: "Sunucuda APP_ACCESS_TOKEN ayarlanmamış." });
+  if (!authorized(req)) return send(res, 401, { error: "Uygulama erişim anahtarı geçersiz." });
+  if (!rateLimit(req)) return send(res, 429, { error: "Çok fazla istek gönderildi. Bir dakika sonra tekrar deneyin." });
+  let payload;
+  try { payload = await readJSON(req); }
+  catch (error) { return send(res, 400, { error: error.message || "Geçersiz JSON isteği." }); }
+  if (typeof payload.image_base64 !== "string" || payload.image_base64.length < 100) {
+    return send(res, 400, { error: "Fotoğraf verisi eksik." });
+  }
+  const mime = payload.mime_type === "image/png" ? "image/png" : "image/jpeg";
+  const imageBytes = Buffer.from(payload.image_base64, "base64");
+  if (!imageBytes.length || imageBytes.length > 18 * 1024 * 1024) return send(res, 413, { error: "Fotoğraf 18 MB sınırını aşıyor." });
+  try {
+    const analysis = await analyzePhoto(imageBytes, mime);
+    if (!analysis) return send(res, 503, { error: "Fotoğraf analizi için GEMINI_API_KEY veya GROQ_API_KEY eklenmeli." });
+    return send(res, 200, {
+      analysis_provider: analysis.provider || null,
+      analysis_summary: analysis.summary || null,
+      lighting: analysis.lighting || null,
+      color: analysis.color || null,
+      composition: analysis.composition || null,
+      recommendations: Array.isArray(analysis.recommendations) ? analysis.recommendations.slice(0, 4) : [],
+      recommended_commands: Array.isArray(analysis.recommended_commands) ? analysis.recommended_commands.slice(0, 4) : []
+    });
+  } catch (error) {
+    return send(res, 502, { error: error.message || "Fotoğraf analizi başarısız oldu." });
+  }
+}
+
 async function handleProcess(req, res) {
   if (!APP_ACCESS_TOKEN) return send(res, 503, { error: "Sunucuda APP_ACCESS_TOKEN ayarlanmamış." });
   if (!authorized(req)) return send(res, 401, { error: "Uygulama erişim anahtarı geçersiz." });
@@ -254,6 +284,10 @@ const server = http.createServer(async (req, res) => {
         openai_fallback: Boolean(OPENAI_API_KEY)
       }
     });
+  }
+  if (req.method === "POST" && req.url === "/v1/analyze") {
+    if (!req.headers["content-type"]?.includes("application/json")) return send(res, 415, { error: "Content-Type application/json gerekli." });
+    return handleAnalyze(req, res);
   }
   if (req.method === "POST" && req.url === "/v1/process") {
     if (!req.headers["content-type"]?.includes("application/json")) return send(res, 415, { error: "Content-Type application/json gerekli." });
