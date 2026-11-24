@@ -43,7 +43,7 @@ Do not add secrets to GitHub files, the iOS app, or chat messages. Enter them on
 
 ## API contract
 
-The app sends `image_base64`, `mime_type`, `commands`, `output_format`, and local Vision analysis to `POST /v1/process`.
+The app can call `POST /v1/analyze` before editing to receive a Gemini/Groq photo summary, lighting/color/composition notes, and suggested commands. Editing calls `POST /v1/process` with `image_base64`, `mime_type`, `commands`, `output_format`, and local Vision analysis.
 
 Successful response:
 - `image_base64`: edited image
