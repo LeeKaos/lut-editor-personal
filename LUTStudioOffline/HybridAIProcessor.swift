@@ -100,14 +100,30 @@ struct CloudAIClient {
     struct ResponsePayload: Decodable {
         let imageBase64: String?
         let error: String?
+        let provider: String?
+        let analysisProvider: String?
+        let analysisSummary: String?
+        let recommendations: [String]?
 
         enum CodingKeys: String, CodingKey {
             case imageBase64 = "image_base64"
             case error
+            case provider
+            case analysisProvider = "analysis_provider"
+            case analysisSummary = "analysis_summary"
+            case recommendations
         }
     }
 
-    func process(_ image: UIImage, commands: [AICommand], endpoint: String, accessToken: String) async throws -> UIImage {
+    struct Output {
+        let image: UIImage
+        let provider: String?
+        let analysisProvider: String?
+        let analysisSummary: String?
+        let recommendations: [String]
+    }
+
+    func process(_ image: UIImage, commands: [AICommand], endpoint: String, accessToken: String) async throws -> Output {
         guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             throw CloudAIError.endpointNotConfigured
         }
@@ -150,7 +166,13 @@ struct CloudAIClient {
               let outputImage = UIImage(data: outputData) else {
             throw CloudAIError.invalidResponse
         }
-        return outputImage
+        return Output(
+            image: outputImage,
+            provider: result.provider,
+            analysisProvider: result.analysisProvider,
+            analysisSummary: result.analysisSummary,
+            recommendations: result.recommendations ?? []
+        )
     }
 }
 
@@ -158,6 +180,10 @@ struct AIProcessingResult {
     let image: UIImage
     let usedCloud: Bool
     let cloudFallbackMessage: String?
+    let cloudProvider: String?
+    let analysisProvider: String?
+    let analysisSummary: String?
+    let recommendations: [String]
 }
 
 /// Cloud-first for opted-in, configured requests; deterministic local/Core ML fallback otherwise.
@@ -179,7 +205,15 @@ enum HybridAIProcessor {
             } else {
                 do {
                     let output = try await CloudAIClient().process(image, commands: commands, endpoint: cloudEndpoint, accessToken: cloudAccessToken)
-                    return AIProcessingResult(image: output, usedCloud: true, cloudFallbackMessage: nil)
+                    return AIProcessingResult(
+                        image: output.image,
+                        usedCloud: true,
+                        cloudFallbackMessage: nil,
+                        cloudProvider: output.provider,
+                        analysisProvider: output.analysisProvider,
+                        analysisSummary: output.analysisSummary,
+                        recommendations: output.recommendations
+                    )
                 } catch {
                     cloudFailure = "Bulut işlemi tamamlanamadı; yerel işlem deneniyor. \(error.localizedDescription)"
                 }
@@ -197,6 +231,14 @@ enum HybridAIProcessor {
                 output = try AICommandEngine.apply(command, to: output)
             }
         }
-        return AIProcessingResult(image: output, usedCloud: false, cloudFallbackMessage: cloudFailure)
+        return AIProcessingResult(
+            image: output,
+            usedCloud: false,
+            cloudFallbackMessage: cloudFailure,
+            cloudProvider: nil,
+            analysisProvider: nil,
+            analysisSummary: nil,
+            recommendations: []
+        )
     }
 }
