@@ -3,6 +3,8 @@ name: Build LumaGrade IPA
 on:
   push:
     branches: [main, codex/lumagrade-build]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
