@@ -797,7 +797,7 @@ struct EditorView: View {
     }
 
     private func makeProcessingStatus(
-        _ processing: HybridAIProcessingResult,
+        _ processing: AIProcessingResult,
         commands: [AICommand]
     ) -> String {
         let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
