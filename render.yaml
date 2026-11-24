@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: lut-studio-openai-backend
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ACCESS_TOKEN
+        sync: false

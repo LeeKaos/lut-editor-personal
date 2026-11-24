@@ -1,0 +1,131 @@
+name: Convert AI models to Core ML
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "feature/beautify-natural-grading" ]
+    paths:
+      - ".github/workflows/convert-ai-models.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  convert:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Checkout app and conversion scripts
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install conversion dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy==1.26.4 torch==2.2.2 torchvision==0.17.2 coremltools==7.2
+          python -m pip install addict future lmdb lpips==0.1.4 opencv-python-headless==4.10.0.84 Pillow PyYAML requests scipy tqdm yapf
+          python -m pip install numpy==1.26.4
+          python -c "import numpy, torch, lpips; print('NumPy', numpy.__version__, '| PyTorch', torch.__version__, '| LPIPS ready')"
+
+      - name: Clone official CodeFormer source
+        run: |
+          git clone --depth 1 https://github.com/sczhou/CodeFormer.git
+
+      - name: Generate BasicSR version module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          package = Path("CodeFormer/basicsr")
+          version = (package / "VERSION").read_text().strip()
+          parts = tuple(int(part) for part in version.split("."))
+          (package / "version.py").write_text(
+              f"__version__ = {version!r}\n"
+              f"__gitsha__ = 'unknown'\n"
+              f"version_info = {parts!r}\n",
+              encoding="utf-8",
+          )
+          print(f"Generated BasicSR version module: {version}")
+          PY
+
+      - name: Make CodeFormer feature-size keys static for tracing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
+          source = path.read_text(encoding="utf-8")
+          encoder_old = "enc_feat_dict[str(x.shape[-1])] = x.clone()"
+          generator_old = "f_size = str(x.shape[-1])"
+          if source.count(encoder_old) != 1 or source.count(generator_old) != 1:
+              raise SystemExit(
+                  "Unexpected official CodeFormer source layout; "
+                  f"encoder expression count={source.count(encoder_old)}, "
+                  f"generator expression count={source.count(generator_old)}"
+              )
+          encoder_new = (
+              'enc_feat_dict[{2: "512", 5: "256", 8: "128", '
+              '11: "64", 14: "32"}[i]] = x.clone()'
+          )
+          generator_new = (
+              'f_size = {9: "32", 12: "64", 15: "128", 18: "256"}[i]'
+          )
+          source = source.replace(encoder_old, encoder_new, 1)
+          source = source.replace(generator_old, generator_new, 1)
+          path.write_text(source, encoding="utf-8")
+          print("Patched encoder feature storage and generator fusion keys.")
+          PY
+
+      - name: Replace unsupported variance operation for Core ML
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("CodeFormer/basicsr/archs/codeformer_arch.py")
+          source = path.read_text(encoding="utf-8")
+          old = "    feat_var = feat.view(b, c, -1).var(dim=2) + eps"
+          new = "\n".join([
+              "    flat = feat.view(b, c, -1)",
+              "    feat_mean = flat.mean(dim=2)",
+              "    centered = flat - feat_mean.unsqueeze(-1)",
+              "    # Match torch.var's default unbiased (N-1) estimator without aten::var.",
+              "    feat_var = (centered * centered).sum(dim=2) / (flat.shape[2] - 1) + eps",
+          ])
+          if source.count(old) != 1:
+              raise SystemExit(
+                  f"Expected one CodeFormer AdaIN variance expression, found {source.count(old)}"
+              )
+          source = source.replace(old, new, 1)
+          compile(source, str(path), "exec")
+          path.write_text(source, encoding="utf-8")
+          print("Replaced aten::var with mean/center/square/sum operations.")
+          PY
+
+      - name: Download official model checkpoints
+        run: |
+          mkdir -p CodeFormer/weights/CodeFormer weights
+          curl -fL --retry 5 --retry-delay 3 https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth -o CodeFormer/weights/CodeFormer/codeformer.pth
+          curl -fL --retry 5 --retry-delay 3 https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth -o weights/RealESRGAN_x4plus.pth
+          ls -lh CodeFormer/weights/CodeFormer/codeformer.pth weights/RealESRGAN_x4plus.pth
+
+      - name: Convert CodeFormer
+        run: python tools/coreml_conversion/convert_codeformer.py
+
+      - name: Convert Real-ESRGAN x4plus
+        run: python tools/coreml_conversion/convert_realesrgan.py
+
+      - name: Package Core ML models
+        run: |
+          cd artifacts
+          zip -qry ../iOS-CoreML-models.zip CodeFormer.mlpackage RealESRGAN_x4plus.mlpackage
+          cd ..
+          ls -lh iOS-CoreML-models.zip
+
+      - name: Upload Core ML model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-CoreML-models
+          path: iOS-CoreML-models.zip
+          if-no-files-found: error
+          retention-days: 7

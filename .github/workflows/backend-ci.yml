@@ -1,0 +1,44 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "render.yaml"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches: ["feature/beautify-natural-grading"]
+    paths:
+      - "backend/**"
+      - "render.yaml"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend dependencies
+        run: npm install --prefix backend --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: node --check backend/server.mjs
+      - name: Start backend and test health/auth
+        env:
+          APP_ACCESS_TOKEN: test-app-token
+          PORT: "8080"
+        run: |
+          node backend/server.mjs > /tmp/lut-backend.log 2>&1 &
+          echo $! > /tmp/lut-backend.pid
+          for i in $(seq 1 20); do
+            if curl --silent --fail http://127.0.0.1:8080/health; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:8080/health
+          test "$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8080/v1/process -H "Content-Type: application/json" -d '{}')" = "401"
+          test "$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8080/v1/process -H "Content-Type: application/json" -H "X-App-Token: test-app-token" -d '{}')" = "400"
+          test "$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8080/v1/analyze -H "Content-Type: application/json" -H "X-App-Token: test-app-token" -d '{}')" = "400"
+          kill "$(cat /tmp/lut-backend.pid)"

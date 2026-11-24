@@ -2,7 +2,7 @@ name: Build iPhone app
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   workflow_dispatch:
 
 permissions:
@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Get app source
         uses: actions/checkout@v4
+
+      - name: Generate app icon PNG
+        run: |
+          brew install librsvg
+          rsvg-convert -w 1024 -h 1024 LUTStudioOffline/Assets.xcassets/AppIcon.appiconset/AppIcon.svg -o LUTStudioOffline/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 
       - name: Build for iPhone
         run: |

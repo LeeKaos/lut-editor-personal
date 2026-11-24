@@ -12,6 +12,8 @@ private enum EditorTab: String, CaseIterable {
     case filters = "Filters"
     case adjust = "Adjust"
     case effects = "Effects"
+    case custom = "Özel"
+    case ai = "Yapay Zekâ"
 }
 
 private struct LUTPreset: Identifiable, Hashable {
@@ -68,7 +70,7 @@ private enum FilmEffect: String, CaseIterable, Identifiable, Codable {
 
 private struct GradeSettings: Codable, Equatable {
     var lutURL: URL?
-    var lutIntensity: Float = 1
+    var lutIntensity: Float = 0.72
     var hue: Float = 0
     var exposure: Float = 0
     var contrast: Float = 0
@@ -86,6 +88,8 @@ private struct GradeSettings: Codable, Equatable {
     var roughness: Float = 0.35
     var size: Float = 0.55
     var smartEnhance: Bool? = nil
+    // Optional to keep older saved project and preset JSON files decodable.
+    var beautifyEnabled: Bool? = nil
 }
 
 private struct UserPreset: Codable, Identifiable {
@@ -204,9 +208,38 @@ struct EditorView: View {
     @State private var showExportMessage = false
     @State private var showingPhotoPicker = false
     @State private var photoAccessAlert: String?
+    @StateObject private var localAIModels = LocalAIModelStore()
+    @State private var isImportingAIModel = false
+    @State private var pendingAIKind: LocalAIModelKind = .realESRGAN
+    @State private var isRunningAI = false
+    @State private var aiStatusMessage: String?
+    @State private var slashCommandText = "/GLOWUP"
+    @AppStorage("cloudAIPhotoUploadEnabled") private var cloudAIPhotoUploadEnabled = false
+    @AppStorage("cloudAIEndpoint") private var cloudAIEndpoint = ""
+    @State private var cloudAIAppToken = CloudAIAppTokenStore.load()
 
     private let accent = Color(red: 0.66, green: 1, blue: 0.16)
-    private static let imageContext = CIContext(options: [.cacheIntermediates: false])
+    nonisolated(unsafe) private static let imageContext = CIContext(options: [.cacheIntermediates: false])
+    // A seeded texture keeps film grain stable between video frames instead of flickering.
+    nonisolated(unsafe) private static let grainTexture: CIImage = {
+        let width = 512
+        let height = 512
+        var state: UInt32 = 0x00C0FFEE
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        for pixel in 0..<(width * height) {
+            state = 1_664_525 &* state &+ 1_013_904_223
+            let sample = UInt8(112 + ((state >> 24) % 33))
+            let offset = pixel * 4
+            bytes[offset] = sample
+            bytes[offset + 1] = sample
+            bytes[offset + 2] = sample
+        }
+        let data = Data(bytes)
+        return CIImage(bitmapData: data, bytesPerRow: width * 4,
+                       size: CGSize(width: width, height: height),
+                       format: .RGBA8,
+                       colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+    }()
 
     init(initialMediaURL: URL? = nil, onClose: (() -> Void)? = nil) {
         self.initialMediaURL = initialMediaURL
@@ -226,6 +259,45 @@ struct EditorView: View {
     }
 
     var body: some View {
+        editorContent
+        .fileImporter(isPresented: $isImportingAIModel, allowedContentTypes: [.item],
+                      allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                let kind = pendingAIKind
+                Task {
+                    do {
+                        try await localAIModels.installModel(from: url, for: kind)
+                        aiStatusMessage = "\(kind.title) modeli cihaza yüklendi."
+                    } catch {
+                        aiStatusMessage = error.localizedDescription
+                    }
+                }
+            case .failure(let error):
+                aiStatusMessage = error.localizedDescription
+            }
+        }
+        .alert("Yerel AI İşlemi", isPresented: Binding(
+            get: { aiStatusMessage != nil },
+            set: { if !$0 { aiStatusMessage = nil } }
+        )) {
+            Button("Tamam", role: .cancel) { aiStatusMessage = nil }
+        } message: {
+            Text(aiStatusMessage ?? "")
+        }
+        .onDisappear {
+            player?.pause()
+            removeTimeObserver()
+            compositionUpdateTask?.cancel()
+            photoRenderGeneration += 1
+        }
+        .task {
+            await localAIModels.loadInstalledModels()
+        }
+    }
+
+    private var editorContent: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 Color.black
@@ -361,6 +433,8 @@ struct EditorView: View {
                 case .filters: filtersPanel
                 case .adjust: adjustmentsPanel
                 case .effects: effectsPanel
+                case .custom: customPanel
+                case .ai: aiPanel
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -471,12 +545,358 @@ struct EditorView: View {
                 }.padding(20)
             }.preferredColorScheme(.dark)
         }
-        .onDisappear {
-            player?.pause()
-            removeTimeObserver()
-            compositionUpdateTask?.cancel()
-            photoRenderGeneration += 1
+    }
+
+
+    private var aiPanel: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 15) {
+                HStack(spacing: 9) {
+                    Image(systemName: "wand.and.stars").foregroundStyle(accent).font(.system(size: 22))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Yapay Zekâ Stüdyosu").font(.system(size: 16, weight: .semibold))
+                        Text("Fotoğrafını seç, bir efekte dokun").font(.system(size: 11)).foregroundStyle(.white.opacity(0.58))
+                    }
+                    Spacer()
+                    Text("CİHAZ İÇİ").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: $cloudAIPhotoUploadEnabled) {
+                        Text("Çok sağlayıcılı Bulut AI").font(.system(size: 11, weight: .semibold))
+                    }
+                    .tint(accent)
+                    TextField("HTTPS bulut AI sunucu adresi", text: $cloudAIEndpoint)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.system(size: 10, design: .monospaced))
+                        .padding(10)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                    SecureField("Sunucu uygulama erişim anahtarı", text: $cloudAIAppToken)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 10, design: .monospaced))
+                        .padding(10)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                        .onChange(of: cloudAIAppToken) { _, newValue in
+                            CloudAIAppTokenStore.save(newValue)
+                        }
+                    Text("Açıkken fotoğraf Gemini/Groq ile analiz edilir, Hugging Face modeliyle düzenlenir; isteğe bağlı OpenAI yedek olabilir. Kapalıysa fotoğraf cihazdan çıkmaz. Sağlayıcı anahtarları yalnızca sunucuda tutulur.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .padding(11)
+                .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+
+                Button {
+                    analyzeCurrentPhoto()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "viewfinder")
+                        Text("Fotoğrafı analiz et ve ayar öner")
+                        Spacer()
+                        Image(systemName: "sparkles")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .padding(12)
+                    .background(accent, in: RoundedRectangle(cornerRadius: 9))
+                }
+                .buttonStyle(.plain)
+                .disabled(imageURL == nil || isRunningAI || !cloudAIPhotoUploadEnabled)
+
+                HStack(spacing: 8) {
+                    TextField("/GLOWUP /SOFTLIGHT", text: $slashCommandText)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .padding(12)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    Button { runSlashCommand(slashCommandText) } label: {
+                        Image(systemName: "play.fill").foregroundStyle(.black)
+                            .frame(width: 44, height: 44)
+                            .background(accent, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .disabled(imageURL == nil || isRunningAI)
+                }
+
+                aiCommandSection("TEK DOKUNUŞLA EFEKTLER",
+                                subtitle: "Core Image • Fotoğrafa anında uygulanır",
+                                commands: ["/GLOWUP", "/BGSTUDIO", "/SOFTLIGHT", "/PROSHOT",
+                                           "/OLD2NEW", "/HDREAL", "/COLORFIX", "/NIGHTFIX",
+                                           "/LONGEXPOSURE", "/MOTIONBLUR", "/GOLDENHOUR"])
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("CORE ML MODELLERİ").font(.system(size: 10, weight: .bold)).tracking(1)
+                    Text("Modelleri Dosyalar uygulamasından ekleyebilirsin. İşlem cihaz üzerinde yapılır.")
+                        .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                    aiModelRow(title: "CodeFormer • Yüz iyileştirme", command: "/FACEFIX",
+                               kind: .codeFormer, symbol: "face.smiling")
+                    aiModelRow(title: "Real-ESRGAN • HD gerçek çözünürlük artırma", command: "/HDREAL",
+                               kind: .realESRGAN, symbol: "arrow.up.left.and.arrow.down.right")
+                }
+
+                if isRunningAI {
+                    HStack(spacing: 8) {
+                        ProgressView().tint(accent)
+                        Text("Efekt uygulanıyor…").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                if let aiStatusMessage, !aiStatusMessage.isEmpty {
+                    Text(aiStatusMessage)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Bulut: Gemini Flash analiz, Groq Vision yedek, Hugging Face görsel düzenleme. Yerel: FACEFIX/HDREAL için Core ML; diğer efektler Core Image.")
+                    .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
+            }
+            .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
+            .foregroundStyle(.white)
         }
+    }
+
+    private func aiCommandSection(_ title: String, subtitle: String, commands: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 10, weight: .bold)).tracking(1)
+            Text(subtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(commands, id: \.self) { command in
+                    Button {
+                        slashCommandText = command
+                        runSlashCommand(command)
+                    } label: {
+                        HStack {
+                            Text(command).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            Spacer(minLength: 2)
+                            Image(systemName: "play.fill").font(.system(size: 8))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 12)
+                        .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(imageURL == nil || isRunningAI)
+                }
+            }
+        }
+    }
+
+    private func aiModelRow(title: String, command: String, kind: LocalAIModelKind, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).foregroundStyle(accent).frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 11, weight: .semibold))
+                Text(localAIModels.loadedKinds.contains(kind) ? "Model hazır" : "Model yüklenmedi")
+                    .font(.system(size: 9)).foregroundStyle(.white.opacity(0.52))
+            }
+            Spacer()
+            Button(localAIModels.loadedKinds.contains(kind) ? "Uygula" : "Model ekle") {
+                if localAIModels.loadedKinds.contains(kind) {
+                    slashCommandText = command
+                    runSlashCommand(command)
+                } else {
+                    pendingAIKind = kind
+                    isImportingAIModel = true
+                }
+            }
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 11).padding(.vertical, 8)
+            .background(accent, in: Capsule())
+            .disabled(isRunningAI || (imageURL == nil && localAIModels.loadedKinds.contains(kind)))
+        }
+        .padding(10)
+        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func analyzeCurrentPhoto() {
+        guard cloudAIPhotoUploadEnabled else {
+            aiStatusMessage = "Önce Bulut AI seçeneğini açmalısın."
+            return
+        }
+        guard let currentURL = imageURL,
+              let source = UIImage(contentsOfFile: currentURL.path) else {
+            aiStatusMessage = "Önce galeriden bir fotoğraf seçmelisin."
+            return
+        }
+        isRunningAI = true
+        aiStatusMessage = "Fotoğraf Gemini Flash ile analiz ediliyor…"
+        Task {
+            defer { isRunningAI = false }
+            do {
+                let analysis = try await CloudAIClient().analyze(
+                    source,
+                    endpoint: cloudAIEndpoint,
+                    accessToken: cloudAIAppToken
+                )
+                var lines: [String] = []
+                if let summary = analysis.summary { lines.append(summary) }
+                if let lighting = analysis.lighting { lines.append("Işık: " + lighting) }
+                if let color = analysis.color { lines.append("Renk: " + color) }
+                if let composition = analysis.composition { lines.append("Kompozisyon: " + composition) }
+                if !analysis.recommendations.isEmpty {
+                    lines.append("Öneriler: " + analysis.recommendations.joined(separator: " • "))
+                }
+                if !analysis.recommendedCommands.isEmpty {
+                    lines.append("Komut önerisi: " + analysis.recommendedCommands.map { "/" + $0 }.joined(separator: " "))
+                }
+                aiStatusMessage = "Fotoğraf analizi tamamlandı • " + (analysis.provider ?? "Bulut AI")
+                    + "\\n" + lines.joined(separator: "\\n")
+            } catch {
+                aiStatusMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func runSlashCommand(_ rawCommand: String) {
+        let commands = AICommandEngine.commands(from: rawCommand)
+        guard !commands.isEmpty else {
+            aiStatusMessage = "Komut tanınmadı. Örnek: /GLOWUP veya /GLOWUP /SOFTLIGHT"
+            return
+        }
+        guard let currentURL = imageURL,
+              let source = UIImage(contentsOfFile: currentURL.path) else {
+            aiStatusMessage = "Önce galeriden bir fotoğraf seçmelisin."
+            return
+        }
+        isRunningAI = true
+        Task {
+            await processSlashCommand(source, commands: commands)
+        }
+    }
+
+    private func processSlashCommand(_ source: UIImage, commands: [AICommand]) async {
+        defer { isRunningAI = false }
+        do {
+            let processing = try await HybridAIProcessor.process(
+                source,
+                commands: commands,
+                localModels: localAIModels,
+                cloudEndpoint: cloudAIEndpoint,
+                allowCloudUpload: cloudAIPhotoUploadEnabled,
+                cloudAccessToken: cloudAIAppToken
+            )
+            try applyProcessedImage(processing.image, original: source)
+            aiStatusMessage = makeProcessingStatus(processing, commands: commands)
+        } catch {
+            aiStatusMessage = error.localizedDescription
+        }
+    }
+
+    private func applyProcessedImage(_ result: UIImage, original: UIImage) throws {
+        guard let data = result.jpegData(compressionQuality: 0.98) else {
+            throw LocalAIError.invalidModelOutput
+        }
+        let savedURL = try ProjectFileStorage.keepImportedPhoto(data)
+        if originalPhotoPreview == nil { originalPhotoPreview = original }
+        photoPreview = result
+        imageURL = savedURL
+        isShowingOriginal = false
+    }
+
+    private func makeProcessingStatus(
+        _ processing: AIProcessingResult,
+        commands: [AICommand]
+    ) -> String {
+        let route = processing.usedCloud ? "Bulut AI" : "Cihaz içi işlem"
+        let commandNames = commands.map(\.title).joined(separator: " + ")
+        var details: [String] = []
+        if let provider = processing.cloudProvider {
+            details.append("Düzenleme: " + provider)
+        }
+        if let analyzer = processing.analysisProvider {
+            details.append("Analiz: " + analyzer)
+        }
+        if let summary = processing.analysisSummary, !summary.isEmpty {
+            details.append(summary)
+        }
+        if !processing.recommendations.isEmpty {
+            let recommendations = processing.recommendations.joined(separator: " • ")
+            details.append("Öneriler: " + recommendations)
+        }
+        let detailText = details.isEmpty ? "" : "\\n" + details.joined(separator: "\\n")
+        let fallback = processing.cloudFallbackMessage ?? ""
+        let fallbackText = fallback.isEmpty ? "" : " (" + fallback + ")"
+        return commandNames + " tamamlandı • " + route + detailText + fallbackText
+            + "\\nSonucu dışa aktarabilirsin."
+    }
+
+    private var customPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles").font(.system(size: 22, weight: .semibold)).foregroundStyle(accent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Güzelleştir").font(.system(size: 16, weight: .semibold))
+                    Text("Doğal renk ve detay iyileştirmesi").font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+                }
+                Spacer()
+                Text(settings.beautifyEnabled == true ? "AÇIK" : "HAZIR")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(settings.beautifyEnabled == true ? .black : .white.opacity(0.7))
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(settings.beautifyEnabled == true ? accent : .white.opacity(0.1), in: Capsule())
+            }
+            Text("Tek dokunuşla hafif renk dengesi, kontrollü kontrast ve doğal netlik uygular. Yüzü yeniden oluşturmaz veya cilt dokusunu yapay biçimde yumuşatmaz.")
+                .font(.system(size: 11)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
+            Button {
+                settings.beautifyEnabled = settings.beautifyEnabled != true
+                settings.smartEnhance = nil
+            } label: {
+                Label(settings.beautifyEnabled == true ? "Güzelleştirmeyi Kapat" : "Tek Dokunuşla Güzelleştir",
+                      systemImage: settings.beautifyEnabled == true ? "checkmark.circle.fill" : "wand.and.stars")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(.black)
+                    .frame(maxWidth: .infinity).padding(.vertical, 13).background(accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            Divider().overlay(.white.opacity(0.12))
+            Text("CİHAZ İÇİ YAPAY ZEKÂ MODELLERİ")
+                .font(.system(size: 10, weight: .bold)).tracking(1.1)
+                .foregroundStyle(.white.opacity(0.55))
+            ForEach(LocalAIModelKind.allCases) { kind in
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(kind.title).font(.system(size: 12, weight: .semibold))
+                            Text(localAIModels.loadedKinds.contains(kind)
+                                 ? (localAIModels.modelNames[kind] ?? "Model hazır")
+                                 : kind.detail)
+                                .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                        }
+                        Spacer()
+                        Button(localAIModels.loadedKinds.contains(kind) ? "Modeli değiştir" : "Model ekle") {
+                            pendingAIKind = kind
+                            isImportingAIModel = true
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(accent)
+                    }
+                    Button {
+                        runLocalAI(kind)
+                    } label: {
+                        HStack {
+                            if isRunningAI { ProgressView().tint(.black) }
+                            else { Image(systemName: kind == .codeFormer ? "face.smiling" : "arrow.up.left.and.arrow.down.right") }
+                            Text(kind == .codeFormer ? "Yüz detaylarını iyileştir" : "Fotoğrafı AI ile büyüt")
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(.black)
+                        .padding(.horizontal, 13).padding(.vertical, 10)
+                        .background(accent.opacity(0.92), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!localAIModels.loadedKinds.contains(kind) || imageURL == nil || isRunningAI || localAIModels.isBusy)
+                }
+                .padding(11)
+                .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+            }
+            Text("Modeller .mlpackage, .mlmodel veya .mlmodelc olarak bu cihaza yüklenir. Görseller sunucuya gönderilmez. CodeFormer için uyumlu ve lisansı uygun Core ML dönüşümü gerekir.")
+                .font(.system(size: 10)).foregroundStyle(.white.opacity(0.48))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20).padding(.top, 8).foregroundStyle(.white)
     }
 
     private var filtersPanel: some View {
@@ -544,19 +964,20 @@ struct EditorView: View {
         VStack(spacing: 16) {
             HStack(spacing: 8) {
                 Button {
-                    settings.smartEnhance = settings.smartEnhance != true
+                    settings.beautifyEnabled = settings.beautifyEnabled != true
+                    settings.smartEnhance = nil
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: "sparkles")
-                        Text("Smart Enhance · On device")
+                        Text("Natural Enhance")
                         Spacer()
-                        Text(settings.smartEnhance == true ? "ON" : "AUTO")
+                        Text(settings.beautifyEnabled == true ? "ON" : "OFF")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                     }
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(settings.smartEnhance == true ? .black : .white)
+                    .foregroundStyle(settings.beautifyEnabled == true ? .black : .white)
                     .padding(.horizontal, 14).frame(height: 38)
-                    .background(settings.smartEnhance == true ? accent : .white.opacity(0.08), in: Capsule())
+                    .background(settings.beautifyEnabled == true ? accent : .white.opacity(0.08), in: Capsule())
                 }
                 .buttonStyle(.plain)
 
@@ -568,11 +989,11 @@ struct EditorView: View {
             }
             .padding(.horizontal, 20)
             Spacer(minLength: 18)
-            HStack {
+            HStack(spacing: 10) {
                 Text(selectedAdjustment.rawValue).font(.system(size: 12, weight: .medium))
                 Spacer()
                 if selectedAdjustment != .curves {
-                    Text(adjustmentValue, format: .number.precision(.fractionLength(0)))
+                    Text(adjustmentValueText)
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7))
                 }
             }.padding(.horizontal, 24)
@@ -580,9 +1001,22 @@ struct EditorView: View {
                 CurveGraph(points: $settings.curvePoints)
                     .frame(height: 150).padding(.horizontal, 20)
             } else {
-                Slider(value: sliderBinding(binding(for: selectedAdjustment)),
-                       in: Double(range(for: selectedAdjustment).lowerBound)...Double(range(for: selectedAdjustment).upperBound))
-                    .tint(.white).padding(.horizontal, 24)
+                HStack(spacing: 10) {
+                    Slider(value: sliderBinding(binding(for: selectedAdjustment)),
+                           in: Double(range(for: selectedAdjustment).lowerBound)...Double(range(for: selectedAdjustment).upperBound), step: 0.005)
+                        .tint(.white)
+                    Button {
+                        resetAdjustment(selectedAdjustment)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(selectedAdjustment.rawValue) ayarını sıfırla")
+                }.padding(.horizontal, 24)
             }
             Spacer(minLength: 18)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -631,7 +1065,7 @@ struct EditorView: View {
     private func sliderRow(title: String, value: Binding<Float>, range: ClosedRange<Float>) -> some View {
         HStack(spacing: 12) {
             Text(title).font(.system(size: 11)).frame(width: 62, alignment: .leading)
-            Slider(value: sliderBinding(value), in: Double(range.lowerBound)...Double(range.upperBound)).tint(.white)
+            Slider(value: sliderBinding(value), in: Double(range.lowerBound)...Double(range.upperBound), step: 0.005).tint(.white)
         }.foregroundStyle(.white).padding(.horizontal, 20)
     }
 
@@ -654,7 +1088,15 @@ struct EditorView: View {
         }
     }
 
-    private var adjustmentValue: Float { binding(for: selectedAdjustment).wrappedValue * 100 }
+    private var adjustmentValueText: String {
+        let value = binding(for: selectedAdjustment).wrappedValue
+        switch selectedAdjustment {
+        case .exposure: return String(format: "%.2f EV", value)
+        case .hue: return String(format: "%.1f°", value * 180)
+        case .temperature: return String(format: "%.0f", value * 100)
+        default: return String(format: "%.0f", value * 100)
+        }
+    }
 
     private func binding(for adjustment: Adjustment) -> Binding<Float> {
         switch adjustment {
@@ -674,11 +1116,13 @@ struct EditorView: View {
 
     private func range(for adjustment: Adjustment) -> ClosedRange<Float> {
         switch adjustment {
-        case .hue: return -1...1
+        case .hue: return -0.5...0.5
         case .exposure: return -2...2
         case .temperature: return -1...1
-        case .contrast, .highlights, .shadows: return -1...1
-        case .vibrance, .saturation, .sharpness, .vignette, .curves: return -1...1
+        case .contrast, .highlights, .shadows: return -0.5...0.5
+        case .vibrance, .saturation: return -0.5...0.5
+        case .sharpness, .vignette: return 0...1
+        case .curves: return -1...1
         }
     }
 
@@ -731,6 +1175,24 @@ struct EditorView: View {
         showPresetSheet = false
     }
 
+    private func resetAdjustment(_ adjustment: Adjustment) {
+        switch adjustment {
+        case .hue: settings.hue = 0
+        case .exposure: settings.exposure = 0
+        case .contrast: settings.contrast = 0
+        case .highlights: settings.highlights = 0
+        case .shadows: settings.shadows = 0
+        case .temperature: settings.temperature = 0
+        case .vibrance: settings.vibrance = 0
+        case .saturation: settings.saturation = 0
+        case .sharpness: settings.sharpness = 0
+        case .vignette: settings.vignette = 0
+        case .curves:
+            settings.curves = 0
+            settings.curvePoints = [0, 0.25, 0.5, 0.75, 1]
+        }
+    }
+
     private func resetAdjustments() {
         settings.hue = 0
         settings.exposure = 0
@@ -745,6 +1207,7 @@ struct EditorView: View {
         settings.curves = 0
         settings.curvePoints = [0, 0.25, 0.5, 0.75, 1]
         settings.smartEnhance = nil
+        settings.beautifyEnabled = nil
     }
 
     private func deletePreset(_ preset: UserPreset) {
@@ -1003,21 +1466,9 @@ struct EditorView: View {
         try? data.write(to: settingsFile(for: url), options: .atomic)
     }
 
-    private static func grade(_ source: CIImage, settings: GradeSettings, cube: CubeLUT?) -> CIImage {
+    nonisolated private static func grade(_ source: CIImage, settings: GradeSettings, cube: CubeLUT?) -> CIImage {
         var image = source
-        if settings.smartEnhance == true {
-            let options: [CIImageAutoAdjustmentOption: Any] = [
-                .enhance: true,
-                .redEye: false,
-                .crop: false,
-                .level: false
-            ]
-            for filter in image.autoAdjustmentFilters(options: options) {
-                filter.setValue(image, forKey: kCIInputImageKey)
-                if let adjusted = filter.outputImage { image = adjusted }
-            }
-        }
-        if let cube, settings.lutIntensity > 0,
+         if let cube, settings.lutIntensity > 0,
            let lutFilter = CIFilter(name: "CIColorCubeWithColorSpace") {
             lutFilter.setValue(image, forKey: kCIInputImageKey)
             lutFilter.setValue(cube.dimension, forKey: "inputCubeDimension")
@@ -1055,8 +1506,8 @@ struct EditorView: View {
         if settings.highlights != 0 || settings.shadows != 0,
            let filter = CIFilter(name: "CIHighlightShadowAdjust") {
             filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(1 - settings.shadows, forKey: "inputShadowAmount")
-            filter.setValue(1 - settings.highlights, forKey: "inputHighlightAmount")
+            filter.setValue(min(0.5, max(-0.5, settings.shadows)), forKey: "inputShadowAmount")
+            filter.setValue(min(1, max(0, 1 - settings.highlights)), forKey: "inputHighlightAmount")
             image = filter.outputImage ?? image
         }
         if settings.temperature != 0, let filter = CIFilter(name: "CITemperatureAndTint") {
@@ -1065,15 +1516,15 @@ struct EditorView: View {
             filter.setValue(CIVector(x: CGFloat(6500 + settings.temperature * 2800), y: CGFloat(settings.temperature * 20)), forKey: "inputTargetNeutral")
             image = filter.outputImage ?? image
         }
-        if settings.sharpness != 0, let filter = CIFilter(name: "CISharpenLuminance") {
+        if settings.sharpness > 0, let filter = CIFilter(name: "CISharpenLuminance") {
             filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(settings.sharpness * 1.5, forKey: kCIInputSharpnessKey)
+            filter.setValue(min(0.8, settings.sharpness * 0.8), forKey: kCIInputSharpnessKey)
             image = filter.outputImage ?? image
         }
-        if settings.vignette != 0, let filter = CIFilter(name: "CIVignette") {
+        if settings.vignette > 0, let filter = CIFilter(name: "CIVignette") {
             filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(settings.vignette * 2, forKey: kCIInputIntensityKey)
-            filter.setValue(max(source.extent.width, source.extent.height) * 0.7, forKey: kCIInputRadiusKey)
+            filter.setValue(min(1, settings.vignette * 0.8), forKey: kCIInputIntensityKey)
+            filter.setValue(max(source.extent.width, source.extent.height) * 0.72, forKey: kCIInputRadiusKey)
             image = filter.outputImage ?? image
         }
         if let filter = CIFilter(name: "CIToneCurve") {
@@ -1084,47 +1535,73 @@ struct EditorView: View {
             }
             image = filter.outputImage ?? image
         }
-        let amount = settings.effectIntensity
+        if settings.beautifyEnabled == true {
+            // Conservative Core Image adjustments; no face synthesis or automatic contrast stretching.
+            if let color = CIFilter(name: "CIColorControls") {
+                color.setValue(image, forKey: kCIInputImageKey)
+                color.setValue(1.025, forKey: kCIInputSaturationKey)
+                color.setValue(1.025, forKey: kCIInputContrastKey)
+                color.setValue(0.006, forKey: kCIInputBrightnessKey)
+                image = color.outputImage ?? image
+            }
+            if let tone = CIFilter(name: "CIHighlightShadowAdjust") {
+                tone.setValue(image, forKey: kCIInputImageKey)
+                tone.setValue(0.12, forKey: "inputShadowAmount")
+                tone.setValue(0.98, forKey: "inputHighlightAmount")
+                image = tone.outputImage ?? image
+            }
+            if let detail = CIFilter(name: "CISharpenLuminance") {
+                detail.setValue(image, forKey: kCIInputImageKey)
+                detail.setValue(0.18, forKey: kCIInputSharpnessKey)
+                image = detail.outputImage ?? image
+            }
+        }
+        let amount = min(1, max(0, settings.effectIntensity))
         switch settings.effect {
         case .none: break
         case .bloom:
             if let filter = CIFilter(name: "CIBloom") {
                 filter.setValue(image, forKey: kCIInputImageKey)
-                filter.setValue(amount * 2, forKey: kCIInputIntensityKey)
-                filter.setValue(settings.size * 40 + 4, forKey: kCIInputRadiusKey)
+                filter.setValue(amount * 0.55, forKey: kCIInputIntensityKey)
+                filter.setValue(settings.size * 28 + 4, forKey: kCIInputRadiusKey)
                 image = filter.outputImage ?? image
             }
         case .grain:
-            if let noise = CIFilter(name: "CIRandomGenerator")?.outputImage?.cropped(to: source.extent),
-               let controls = CIFilter(name: "CIColorControls"), let blend = CIFilter(name: "CISoftLightBlendMode"),
+            let extent = source.extent
+            let noise = Self.grainTexture
+                .transformed(by: CGAffineTransform(scaleX: extent.width / 512, y: extent.height / 512))
+                .transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
+                .cropped(to: extent)
+            if let controls = CIFilter(name: "CIColorControls"),
+               let blend = CIFilter(name: "CISoftLightBlendMode"),
                let mix = CIFilter(name: "CIDissolveTransition") {
                 controls.setValue(noise, forKey: kCIInputImageKey)
                 controls.setValue(0, forKey: kCIInputSaturationKey)
-                controls.setValue(settings.roughness * 2 + 0.1, forKey: kCIInputContrastKey)
+                controls.setValue(0.7 + settings.roughness * 0.55, forKey: kCIInputContrastKey)
                 blend.setValue(controls.outputImage, forKey: kCIInputImageKey)
                 blend.setValue(image, forKey: kCIInputBackgroundImageKey)
                 mix.setValue(image, forKey: "inputImage")
-                mix.setValue(blend.outputImage, forKey: "inputTargetImage")
-                mix.setValue(amount * 0.4, forKey: "inputTime")
+                mix.setValue(blend.outputImage ?? image, forKey: "inputTargetImage")
+                mix.setValue(amount * 0.18, forKey: "inputTime")
                 image = mix.outputImage ?? image
             }
         case .halation:
             if let bloom = CIFilter(name: "CIBloom") {
                 bloom.setValue(image, forKey: kCIInputImageKey)
-                bloom.setValue(amount * 1.5, forKey: kCIInputIntensityKey)
-                bloom.setValue(settings.size * 30 + 3, forKey: kCIInputRadiusKey)
+                bloom.setValue(amount * 0.45, forKey: kCIInputIntensityKey)
+                bloom.setValue(settings.size * 20 + 3, forKey: kCIInputRadiusKey)
                 let glow = bloom.outputImage ?? image
                 image = glow.applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 1.2, y: 0, z: 0, w: 0),
-                    "inputGVector": CIVector(x: 0, y: 0.48, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 0.22, w: 0)
+                    "inputRVector": CIVector(x: 0.95, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: 0.28, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: 0.08, w: 0)
                 ])
             }
         case .softGlow:
             if let glow = CIFilter(name: "CIBloom"), let mix = CIFilter(name: "CIDissolveTransition") {
                 glow.setValue(image, forKey: kCIInputImageKey)
-                glow.setValue(amount * 1.2, forKey: kCIInputIntensityKey)
-                glow.setValue(settings.size * 50 + 8, forKey: kCIInputRadiusKey)
+                glow.setValue(amount * 0.45, forKey: kCIInputIntensityKey)
+                glow.setValue(settings.size * 30 + 4, forKey: kCIInputRadiusKey)
                 mix.setValue(image, forKey: "inputImage")
                 mix.setValue(glow.outputImage ?? image, forKey: "inputTargetImage")
                 mix.setValue(amount, forKey: "inputTime")
@@ -1170,6 +1647,33 @@ struct EditorView: View {
             }
         }
         return image.cropped(to: source.extent)
+    }
+
+    private func runLocalAI(_ kind: LocalAIModelKind) {
+        guard let currentImageURL = imageURL, let source = UIImage(contentsOfFile: currentImageURL.path) else {
+            aiStatusMessage = "Önce bir fotoğraf seçmelisin."
+            return
+        }
+        isRunningAI = true
+        Task {
+            do {
+                let enhanced = try await localAIModels.enhance(source, using: kind)
+                guard let data = enhanced.jpegData(compressionQuality: 0.98) else {
+                    throw LocalAIError.invalidModelOutput
+                }
+                let savedURL = try ProjectFileStorage.keepImportedPhoto(data)
+                originalPhotoPreview = originalPhotoPreview ?? source
+                photoPreview = enhanced
+                imageURL = savedURL
+                isShowingOriginal = false
+                aiStatusMessage = kind == .codeFormer
+                    ? "CodeFormer yüz restorasyonu tamamlandı. Sonucu dışa aktarabilirsin."
+                    : "Real-ESRGAN yerel büyütme tamamlandı. Sonucu dışa aktarabilirsin."
+            } catch {
+                aiStatusMessage = error.localizedDescription
+            }
+            isRunningAI = false
+        }
     }
 
     private func exportPhoto() {
@@ -1355,7 +1859,8 @@ private struct CurveGraph: View {
                 .onChanged { value in
                     let index = Int((value.location.x / max(size.width, 1) * 4).rounded())
                     guard index > 0, index < 4 else { return }
-                    points[index] = min(1, max(0, 1 - Double(value.location.y / max(size.height, 1))))
+                    let proposed = min(1, max(0, 1 - Double(value.location.y / max(size.height, 1))))
+                    points[index] = min(points[index + 1], max(points[index - 1], proposed))
                 })
         }
         .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
