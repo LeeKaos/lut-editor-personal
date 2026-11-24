@@ -973,17 +973,6 @@ struct EditorView: View {
                     Text(adjustmentValueText)
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7))
                 }
-                Button {
-                    resetAdjustment(selectedAdjustment)
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(Color.white.opacity(0.10), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(selectedAdjustment.rawValue) ayarını sıfırla")
             }.padding(.horizontal, 24)
             if selectedAdjustment == .curves {
                 CurveGraph(points: $settings.curvePoints)
