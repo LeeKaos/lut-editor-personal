@@ -966,21 +966,45 @@ struct EditorView: View {
             }
             .padding(.horizontal, 20)
             Spacer(minLength: 18)
-            HStack {
+            HStack(spacing: 10) {
                 Text(selectedAdjustment.rawValue).font(.system(size: 12, weight: .medium))
                 Spacer()
                 if selectedAdjustment != .curves {
                     Text(adjustmentValueText)
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7))
                 }
+                Button {
+                    resetAdjustment(selectedAdjustment)
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(selectedAdjustment.rawValue) ayarını sıfırla")
             }.padding(.horizontal, 24)
             if selectedAdjustment == .curves {
                 CurveGraph(points: $settings.curvePoints)
                     .frame(height: 150).padding(.horizontal, 20)
             } else {
-                Slider(value: sliderBinding(binding(for: selectedAdjustment)),
-                       in: Double(range(for: selectedAdjustment).lowerBound)...Double(range(for: selectedAdjustment).upperBound), step: 0.005)
-                    .tint(.white).padding(.horizontal, 24)
+                HStack(spacing: 10) {
+                    Slider(value: sliderBinding(binding(for: selectedAdjustment)),
+                           in: Double(range(for: selectedAdjustment).lowerBound)...Double(range(for: selectedAdjustment).upperBound), step: 0.005)
+                        .tint(.white)
+                    Button {
+                        resetAdjustment(selectedAdjustment)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(selectedAdjustment.rawValue) ayarını sıfırla")
+                }.padding(.horizontal, 24)
             }
             Spacer(minLength: 18)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -1137,6 +1161,24 @@ struct EditorView: View {
         category = "My Presets"
         presetName = ""
         showPresetSheet = false
+    }
+
+    private func resetAdjustment(_ adjustment: Adjustment) {
+        switch adjustment {
+        case .hue: settings.hue = 0
+        case .exposure: settings.exposure = 0
+        case .contrast: settings.contrast = 0
+        case .highlights: settings.highlights = 0
+        case .shadows: settings.shadows = 0
+        case .temperature: settings.temperature = 0
+        case .vibrance: settings.vibrance = 0
+        case .saturation: settings.saturation = 0
+        case .sharpness: settings.sharpness = 0
+        case .vignette: settings.vignette = 0
+        case .curves:
+            settings.curves = 0
+            settings.curvePoints = [0, 0.25, 0.5, 0.75, 1]
+        }
     }
 
     private func resetAdjustments() {
