@@ -3,7 +3,7 @@ services:
     name: lut-studio-openai-backend
     runtime: docker
     rootDir: backend
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: OPENAI_API_KEY
