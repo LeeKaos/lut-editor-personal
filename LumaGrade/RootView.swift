@@ -31,7 +31,8 @@ struct GradeSettings: Codable, Equatable {
     var brilliance = 0.0; var blackPoint = 0.0; var definition = 0.0; var noiseReduction = 0.0; var autoEnhance = false
     var customLUTFileName: String? = nil
     var source = "Regular"
-    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, exportCodec, exportResolution, exportBitrateMode, exportBitrateMbps, vignette, bloom, grain, brilliance, blackPoint, definition, noiseReduction, autoEnhance, customLUTFileName, source }
+    var sourceProfileConfirmed = false
+    enum CodingKeys: String, CodingKey { case lutName, intensity, exposure, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks, hue, vibrance, sharpness, curveBlack, curveMid, curveWhite, wheelShadows, wheelMidtones, wheelHighlights, cropAspect, maskEnabled, maskExposure, maskRadius, maskFeather, trimStart, trimEnd, exportCodec, exportResolution, exportBitrateMode, exportBitrateMbps, vignette, bloom, grain, brilliance, blackPoint, definition, noiseReduction, autoEnhance, customLUTFileName, source, sourceProfileConfirmed }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -77,6 +78,7 @@ struct GradeSettings: Codable, Equatable {
         autoEnhance = try c.decodeIfPresent(Bool.self, forKey: .autoEnhance) ?? false
         customLUTFileName = try c.decodeIfPresent(String.self, forKey: .customLUTFileName)
         source = try c.decodeIfPresent(String.self, forKey: .source) ?? "Regular"
+        sourceProfileConfirmed = try c.decodeIfPresent(Bool.self, forKey: .sourceProfileConfirmed) ?? false
     }
 }
 
@@ -849,7 +851,7 @@ struct EditorView: View {
             }
             .onChange(of: favoriteLUTNames) { _, names in UserDefaults.standard.set(Array(names), forKey: "lumagrade.favoriteLUTs") }
             .onChange(of: project.settings.source) { _, source in
-                sourceLUT = CubeLUT.sourceTransform(for: source, bundled: bundledLUTs)
+                sourceLUT = project.settings.sourceProfileConfirmed ? CubeLUT.sourceTransform(for: source, bundled: bundledLUTs) : nil
                 updateVideoComposition()
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [UTType(filenameExtension: "cube")!], allowsMultipleSelection: true) { result in
@@ -973,7 +975,7 @@ struct EditorView: View {
         bundledLUTs = CubeLUT.loadBundled() + CustomLUTStore.loadAll()
         if let url = CustomLUTStore.url(for: project.settings.customLUTFileName) { importedLUT = CubeLUT.load(url: url) }
         else if let match = bundledLUTs.first(where: { $0.1 == project.settings.lutName }) { importedLUT = CubeLUT.load(url: match.2) }
-        sourceLUT = CubeLUT.sourceTransform(for: project.settings.source, bundled: bundledLUTs)
+        sourceLUT = project.settings.sourceProfileConfirmed ? CubeLUT.sourceTransform(for: project.settings.source, bundled: bundledLUTs) : nil
         if bundledLUTs.isEmpty { lutLoadError = "Uygulama paketinde LUT bulunamadı. Filtre dosyaları yüklenemedi." }
         isFavorite = UserDefaults.standard.stringArray(forKey: "lumagrade.favoriteProjects")?.contains(project.id.uuidString) ?? false
         if isVideo {
@@ -1052,7 +1054,7 @@ struct EditorView: View {
     @ViewBuilder private var panel: some View {
         switch tab {
         case 0:
-            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, customLUTFileName: $project.settings.customLUTFileName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, favoriteNames: $favoriteLUTNames, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
+            FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, customLUTFileName: $project.settings.customLUTFileName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, favoriteNames: $favoriteLUTNames, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, isSourceConfirmed: project.settings.sourceProfileConfirmed, loadError: $lutLoadError)
         case 1:
             AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration, previewImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT, onApplySourceProfile: applySourceProfile)
         case 2:
@@ -1096,7 +1098,8 @@ struct EditorView: View {
             redoStack.removeAll()
             try data.write(to: sourceURL, options: .atomic)
             var neutralSettings = GradeSettings()
-            neutralSettings.source = project.settings.source
+            neutralSettings.source = "Regular"
+            neutralSettings.sourceProfileConfirmed = true
             project.settings = neutralSettings
             imageRevision += 1
             importedLUT = nil
@@ -1113,6 +1116,7 @@ struct EditorView: View {
             return
         }
         project.settings.source = profile
+        project.settings.sourceProfileConfirmed = true
         sourceLUT = transform
         updateVideoComposition()
     }
@@ -1538,9 +1542,9 @@ struct AdjustmentPanel: View {
                         Image(systemName: "1.circle.fill").foregroundStyle(accent)
                         Text("Kaynak dönüşümü").font(.system(size: 11, weight: .semibold))
                         Spacer()
-                        Text(pendingSourceProfile == settings.source ? "Onaylandı" : "Onay bekliyor")
+                        Text(pendingSourceProfile == settings.source && settings.sourceProfileConfirmed ? "Onaylandı" : "Onay bekliyor")
                             .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(pendingSourceProfile == settings.source ? accent : .orange)
+                            .foregroundStyle(pendingSourceProfile == settings.source && settings.sourceProfileConfirmed ? accent : .orange)
                     }
                     Text("Apple Log, Sony S-Log ve DJI D-Log gibi düz profilleri önce Rec.709'a dönüştür. Ardından Filtreler sekmesinden yaratıcı LUT ekleyebilirsin.")
                         .font(.system(size: 9)).foregroundStyle(.white.opacity(0.62)).fixedSize(horizontal: false, vertical: true)
@@ -1669,6 +1673,7 @@ struct FilterBrowser: View {
     let sourceImage: UIImage?
     let settings: GradeSettings
     let sourceLUT: CubeLUT?
+    let isSourceConfirmed: Bool
     @Binding var loadError: String?
     @State private var searchText = ""
     @State private var isSearching = false
@@ -1710,7 +1715,7 @@ struct FilterBrowser: View {
             VStack(alignment: .leading, spacing: 4) {
                 Label("1 · Kaynak: \(sourceProfileTitle(settings.source))", systemImage: "camera.aperture").foregroundStyle(accent)
                 Label("2 · Görünüm: \(selectedName == "Original" ? "Yok" : selectedName)", systemImage: "square.stack.3d.up").foregroundStyle(.white.opacity(0.82))
-                Text("Kaynak dönüşümü önce, seçtiğin yaratıcı LUT ve renk ayarları sonra uygulanır.")
+                Text(isSourceConfirmed ? "Kaynak dönüşümü önce, seçtiğin yaratıcı LUT ve renk ayarları sonra uygulanır." : "Önce Ayarla sekmesinden kaynak profilini seçip onayla. LUT katmanları bundan sonra açılır.")
                     .font(.system(size: 9)).foregroundStyle(.white.opacity(0.58))
             }
             .font(.system(size: 10, weight: .semibold))
@@ -1726,7 +1731,7 @@ struct FilterBrowser: View {
                 LazyHStack(spacing: 14) {
                     Button { selectedLUT = nil; selectedName = "Original"; customLUTFileName = nil } label: {
                         LUTTile(name: "Yok", sourceImage: sourceImage, settings: settings, lut: nil, sourceLUT: sourceLUT, selected: selectedName == "Original", favorite: false, width: tileWidth)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.plain).disabled(!isSourceConfirmed)
                     ForEach(Array(visibleItems.enumerated()), id: \.offset) { pair in
                         let item = pair.element
                         Button {
@@ -1739,7 +1744,7 @@ struct FilterBrowser: View {
                             customLUTFileName = item.0 == "Özel" ? item.2.lastPathComponent : nil
                         } label: {
                             LUTTile(name: item.1, sourceImage: sourceImage, settings: settings, lut: CubeLUT.load(url: item.2), sourceLUT: sourceLUT, selected: selectedName == item.1, favorite: favoriteNames.contains(item.1), width: tileWidth)
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.plain).disabled(!isSourceConfirmed)
                         .contextMenu {
                             Button {
                                 if favoriteNames.contains(item.1) { favoriteNames.remove(item.1) }
@@ -1757,7 +1762,7 @@ struct FilterBrowser: View {
             }
             HStack(spacing: 16) {
                 Text("Yoğunluk").font(.system(size: 16, weight: .regular, design: .rounded)).frame(width: 92, alignment: .leading)
-                Slider(value: $intensity, in: 0...100).tint(.white).disabled(selectedLUT == nil)
+                Slider(value: $intensity, in: 0...100).tint(.white).disabled(selectedLUT == nil || !isSourceConfirmed)
                 Text("\(Int(intensity.rounded()))%").font(.system(size: 12, weight: .medium, design: .rounded)).monospacedDigit().foregroundStyle(.white.opacity(0.6)).frame(width: 38, alignment: .trailing)
             }
             .foregroundStyle(.white)
