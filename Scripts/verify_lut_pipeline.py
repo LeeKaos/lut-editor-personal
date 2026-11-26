@@ -25,8 +25,10 @@ for item in required:
         raise SystemExit(f"Missing required source-LUT pipeline element: {item}")
 
 grade = source.index("static func grade(_ source: CIImage")
-base = source.index(required[4], grade)
-creative = source.index(required[5], grade)
+source_apply = "if let sourceLUT { image = apply(sourceLUT, to: image, intensity: 1) }"
+creative_apply = "if let lut { image = apply(lut, to: image, intensity: min(1, max(0, settings.intensity / 100))) }"
+base = source.index(source_apply, grade)
+creative = source.index(creative_apply, grade)
 if base >= creative:
     raise SystemExit("Incorrect LUT order: creative LUT must follow source conversion")
 
