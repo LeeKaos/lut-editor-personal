@@ -520,7 +520,7 @@ private final class BatchExportModel: ObservableObject {
         let settings = project.settings
         let selectedLUT = settings.customLUTFileName.flatMap(CustomLUTStore.url(for:)).flatMap(CubeLUT.load(url:))
             ?? allLUTs.first(where: { $0.1 == settings.lutName }).flatMap { CubeLUT.load(url: $0.2) }
-        let sourceTransform = CubeLUT.sourceTransform(for: settings.source, bundled: allLUTs)
+        let sourceTransform = settings.sourceProfileConfirmed ? CubeLUT.sourceTransform(for: settings.source, bundled: allLUTs) : nil
         let outputName = "\(sourceURL.deletingPathExtension().lastPathComponent)-Düzenlendi-\(index + 1)"
 
         if !isVideo {
