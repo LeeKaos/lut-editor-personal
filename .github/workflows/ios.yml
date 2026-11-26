@@ -69,6 +69,7 @@ jobs:
           test -s "$APP_PATH/LUTs/AcePro2_I-Log.lutf"
           test -s "$APP_PATH/LUTs/GO Ultra_I-Log.lutf"
           test -s "$APP_PATH/LUTs/Luna_Ultra_I-Log.lutf"
+          echo "Checking confirmed source LUT behavior, including batch export"
           python3 Scripts/verify_lut_pipeline.py
           test -s "$APP_PATH/LUTs/Cinematic/Cinematic.lutf"
           ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/LumaGrade")
