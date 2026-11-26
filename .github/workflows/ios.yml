@@ -59,8 +59,17 @@ jobs:
           echo "Bundled LUT count: $LUT_COUNT"
           test "$LUT_COUNT" -eq 101
           test -s "$APP_PATH/LUTs/AppleLog.lutf"
-          test -s "$APP_PATH/LUTs/DJI Mini 4 Pro D-Log M to Rec709.lutf"
           test -s "$APP_PATH/LUTs/AppleLog2.lutf"
+          test -s "$APP_PATH/LUTs/D-LogM.lutf"
+          test -s "$APP_PATH/LUTs/DJI Mini 4 Pro D-Log M to Rec709.lutf"
+          test -s "$APP_PATH/LUTs/DJI OSMO Pocket 4 D-Log to Rec.709.lutf"
+          test -s "$APP_PATH/LUTs/DJI OSMO Pocket 4P D-Log2 to Rec.709.lutf"
+          test -s "$APP_PATH/LUTs/Sony S-Log2 to Rec709.lutf"
+          test -s "$APP_PATH/LUTs/Sony S-Log3 Cine to Rec709.lutf"
+          test -s "$APP_PATH/LUTs/AcePro2_I-Log.lutf"
+          test -s "$APP_PATH/LUTs/GO Ultra_I-Log.lutf"
+          test -s "$APP_PATH/LUTs/Luna_Ultra_I-Log.lutf"
+          python3 Scripts/verify_lut_pipeline.py
           test -s "$APP_PATH/LUTs/Cinematic/Cinematic.lutf"
           ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/LumaGrade")
           [[ " $ARCHS " == *" arm64 "* ]]
