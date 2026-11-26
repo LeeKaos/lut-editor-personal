@@ -203,7 +203,7 @@ struct SepLUTPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("IMAGE-ADAPTIVE COLOR").font(.system(size: 9, weight: .bold, design: .rounded)).tracking(1.2).foregroundStyle(sepLUTAccent)
+                        Text("GÖRÜNTÜYE UYUMLU RENK").font(.system(size: 9, weight: .bold, design: .rounded)).tracking(1.2).foregroundStyle(sepLUTAccent)
                         Text("SepLUT").font(.system(size: 19, weight: .bold, design: .rounded)).foregroundStyle(.white)
                     }
                     Spacer()
@@ -211,14 +211,14 @@ struct SepLUTPanel: View {
                 }
 
                 HStack(spacing: 8) {
-                    chip("Öğrenilmiş 1D", symbol: "line.3.horizontal.decrease")
-                    chip("Öğrenilmiş 3D", symbol: "cube")
+                    chip("1B renk eğrisi", symbol: "line.3.horizontal.decrease")
+                    chip("3B renk küpü", symbol: "cube")
                     chip("Cihaz içi", symbol: "iphone")
                 }
 
                 HStack(spacing: 10) {
-                    imageTile(title: "GİRİŞ", image: sourceImage)
-                    imageTile(title: "SEPLUT", image: outputPreview)
+                    imageTile(title: "ÖNCE", image: sourceImage)
+                    imageTile(title: "SONRA", image: outputPreview)
                 }
                 .frame(height: previewTileHeight)
 
