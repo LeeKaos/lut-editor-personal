@@ -17,6 +17,7 @@ required = [
     "let isSourceConfirmed: Bool",
     ".disabled(!isSourceConfirmed)",
     "project.settings.sourceProfileConfirmed = true",
+    "let sourceTransform = settings.sourceProfileConfirmed ? CubeLUT.sourceTransform(for: settings.source, bundled: allLUTs) : nil",
     "if let sourceLUT { image = apply(sourceLUT, to: image, intensity: 1) }",
     "if let lut { image = apply(lut, to: image, intensity: min(1, max(0, settings.intensity / 100))) }",
 ]
