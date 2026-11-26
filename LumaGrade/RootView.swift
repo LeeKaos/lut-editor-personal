@@ -1054,7 +1054,7 @@ struct EditorView: View {
         case 0:
             FilterBrowser(items: bundledLUTs, categories: lutCategories, selectedCategory: $selectedCategory, selectedName: $project.settings.lutName, customLUTFileName: $project.settings.customLUTFileName, selectedLUT: $importedLUT, intensity: $project.settings.intensity, favoriteNames: $favoriteLUTNames, sourceImage: sourcePreviewImage ?? library.image(for: project), settings: project.settings, sourceLUT: sourceLUT, loadError: $lutLoadError)
         case 1:
-            AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration, previewImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT)
+            AdjustmentPanel(settings: $project.settings, isVideo: isVideo, videoDuration: videoDuration, previewImage: sourcePreviewImage ?? library.image(for: project), lut: importedLUT, sourceLUT: sourceLUT, onApplySourceProfile: applySourceProfile)
         case 2:
             SliderPanel(settings: $project.settings, labels: [("Vinyet", \GradeSettings.vignette, 0...2), ("Parlama", \GradeSettings.bloom, 0...1), ("Gren", \GradeSettings.grain, 0...1)])
         case 3:
@@ -1105,6 +1105,16 @@ struct EditorView: View {
         } catch {
             deepLPFError = "Sonuç mevcut projeye uygulanamadı: \(error.localizedDescription)"
         }
+    }
+    private func applySourceProfile(_ profile: String) {
+        let transform = CubeLUT.sourceTransform(for: profile, bundled: bundledLUTs)
+        guard profile == "Regular" || transform != nil else {
+            lutLoadError = "\(profile) için kaynak dönüşüm LUT'u bulunamadı. Bu profil uygulanmadı."
+            return
+        }
+        project.settings.source = profile
+        sourceLUT = transform
+        updateVideoComposition()
     }
     private func applySepLUT(_ lut: CubeLUT, intensity: Double) {
         do {
@@ -1479,6 +1489,8 @@ struct AdjustmentPanel: View {
     var previewImage: UIImage?
     var lut: CubeLUT?
     var sourceLUT: CubeLUT?
+    var onApplySourceProfile: (String) -> Void
+    @State private var pendingSourceProfile = "Regular"
     @State private var selected: AdjustmentControl = .exposure
 
     private var value: Binding<Double> {
@@ -1513,13 +1525,36 @@ struct AdjustmentPanel: View {
                             .background(settings.autoEnhance ? accent : accent.opacity(0.12), in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    Picker("Kaynak profili", selection: $settings.source) {
-                        ForEach(SourceDetector.profiles, id: \.self) { Text($0).tag($0) }
+                    Picker("Kaynak profili", selection: $pendingSourceProfile) {
+                        ForEach(SourceDetector.profiles, id: \.self) { profile in Text(sourceProfileTitle(profile)).tag(profile) }
                     }
                     .labelsHidden().tint(accent).font(.system(size: 11, weight: .semibold))
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "1.circle.fill").foregroundStyle(accent)
+                        Text("Kaynak dönüşümü").font(.system(size: 11, weight: .semibold))
+                        Spacer()
+                        Text(pendingSourceProfile == settings.source ? "Onaylandı" : "Onay bekliyor")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(pendingSourceProfile == settings.source ? accent : .orange)
+                    }
+                    Text("Apple Log, Sony S-Log ve DJI D-Log gibi düz profilleri önce Rec.709'a dönüştür. Ardından Filtreler sekmesinden yaratıcı LUT ekleyebilirsin.")
+                        .font(.system(size: 9)).foregroundStyle(.white.opacity(0.62)).fixedSize(horizontal: false, vertical: true)
+                    Button { onApplySourceProfile(pendingSourceProfile) } label: {
+                        Label("Kaynak LUT'unu onayla ve uygula", systemImage: "checkmark.seal.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(maxWidth: .infinity).frame(height: 36)
+                            .background(accent, in: RoundedRectangle(cornerRadius: 10)).foregroundStyle(.black)
+                    }.buttonStyle(.plain)
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+                .onAppear { pendingSourceProfile = settings.source }
+                .onChange(of: settings.source) { _, profile in pendingSourceProfile = profile }
 
                 VStack(spacing: 8) {
                     HStack {
@@ -1602,6 +1637,26 @@ struct AdjustmentPanel: View {
     private func time(_ seconds: Double) -> String { let value = max(0, Int(seconds)); return String(format: "%02d:%02d", value / 60, value % 60) }
 }
 
+private func sourceProfileTitle(_ profile: String) -> String {
+    profile == "Regular" ? "Standart / Rec.709" : profile
+}
+
+private func localizedLUTCategory(_ category: String) -> String {
+    switch category {
+    case "Cinematic": return "Sinematik"
+    case "Social": return "Sosyal"
+    case "Clean": return "Temiz"
+    case "Daily": return "Günlük"
+    case "Essentials": return "Temel"
+    case "Movies": return "Filmler"
+    case "Dark": return "Karanlık"
+    case "Kamera": return "Kamera"
+    case "Özel": return "Özel"
+    case "Favoriler": return "Favoriler"
+    default: return category
+    }
+}
+
 struct FilterBrowser: View {
     let items: [(String, String, URL)]
     let categories: [String]
@@ -1633,7 +1688,7 @@ struct FilterBrowser: View {
                         ForEach(categories, id: \.self) { name in
                             Button { selectedCategory = name } label: {
                                 HStack(spacing: 7) {
-                                    Text(name)
+                                    Text(localizedLUTCategory(name))
                                     if selectedCategory == name { Circle().fill(.black).frame(width: 8, height: 8) }
                                 }
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -1652,6 +1707,15 @@ struct FilterBrowser: View {
                 }.buttonStyle(.plain)
             }
             .frame(height: 45)
+            VStack(alignment: .leading, spacing: 4) {
+                Label("1 · Kaynak: \(sourceProfileTitle(settings.source))", systemImage: "camera.aperture").foregroundStyle(accent)
+                Label("2 · Görünüm: \(selectedName == "Original" ? "Yok" : selectedName)", systemImage: "square.stack.3d.up").foregroundStyle(.white.opacity(0.82))
+                Text("Kaynak dönüşümü önce, seçtiğin yaratıcı LUT ve renk ayarları sonra uygulanır.")
+                    .font(.system(size: 9)).foregroundStyle(.white.opacity(0.58))
+            }
+            .font(.system(size: 10, weight: .semibold))
+            .padding(9).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
             if isSearching {
                 TextField("LUT ara", text: $searchText)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
