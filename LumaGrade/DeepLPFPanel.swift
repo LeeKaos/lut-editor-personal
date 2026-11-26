@@ -137,7 +137,7 @@ struct DeepLPFPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("ÖZEL MOTOR").font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1.5).foregroundStyle(deepLPFAccent)
+                        Text("YAPAY ZEKÂ MOTORU").font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1.5).foregroundStyle(deepLPFAccent)
                         Text("DeepLPF").font(.system(size: 19, weight: .bold, design: .rounded)).foregroundStyle(.white)
                     }
                     Spacer()
@@ -145,14 +145,14 @@ struct DeepLPFPanel: View {
                 }
 
                 HStack(spacing: 8) {
-                    filterChip("Cubic", symbol: "point.3.connected.trianglepath.dotted")
-                    filterChip("Graduated", symbol: "line.3.horizontal.decrease")
-                    filterChip("Elliptical", symbol: "circle.dashed")
+                    filterChip("Kübik", symbol: "point.3.connected.trianglepath.dotted")
+                    filterChip("Dereceli", symbol: "line.3.horizontal.decrease")
+                    filterChip("Eliptik", symbol: "circle.dashed")
                 }
 
                 HStack(spacing: 10) {
-                    imageTile(title: "GİRİŞ", image: sourceImage)
-                    imageTile(title: "DEEP LPF", image: enhancedImage)
+                    imageTile(title: "ÖNCE", image: sourceImage)
+                    imageTile(title: "SONRA", image: enhancedImage)
                 }
                 .frame(height: 104)
 
