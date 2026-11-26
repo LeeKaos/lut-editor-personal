@@ -13,6 +13,10 @@ required = [
     "onApplySourceProfile: applySourceProfile",
     'Picker("Kaynak profili", selection: $pendingSourceProfile)',
     "Kaynak LUT'unu onayla ve uygula",
+    "var sourceProfileConfirmed = false",
+    "let isSourceConfirmed: Bool",
+    ".disabled(!isSourceConfirmed)",
+    "project.settings.sourceProfileConfirmed = true",
     "if let sourceLUT { image = apply(sourceLUT, to: image, intensity: 1) }",
     "if let lut { image = apply(lut, to: image, intensity: min(1, max(0, settings.intensity / 100))) }",
 ]
